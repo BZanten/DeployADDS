@@ -1,0 +1,112 @@
+<?xml version="1.0"?>
+<!--  Active Directory Domain Inventory  -->
+<forest name="PowerShellDemo.com" distinguishedName="DC=PowerShellDemo,DC=com">
+
+
+   <domains>
+    <domain name="PowerShellDemo" distinguishedName="DC=PowerShellDemo,DC=com" dnsname="PowerShellDemo.com">
+
+
+      <OUs>
+         <OU name="Org">
+          <OU name="Accounts" description="OU for Active Directory Accounts">
+            <OU name="Service" description="OU containing Service Accounts">
+                <!-- A user account with minimal properties set... -->
+                <User name="usr.Minimal">
+                </User>
+
+
+
+
+                  <!-- A service account with optimal properties set for a service account -->
+                <User name="usr.Optimal">
+                    <SamAccountName>usr.Optimal</SamAccountName>
+                    <UserPrincipalName>usr.Optimal@PowerShellDemo.com</UserPrincipalName>
+                    <Description>Beschrijving Optimale settings service account</Description>
+                    <DisplayName>DisplayName svc Optimal</DisplayName>
+                    <Enabled>True</Enabled>
+                    <Password>*</Password>
+                    <CannotChangePassword>True</CannotChangePassword>
+                    <PasswordNeverExpires>True</PasswordNeverExpires>
+                </User>
+                 <!-- A user account with optimal properties set for a normal user account -->
+                <User name="usr.Optimal">
+                    <SamAccountName>usr.Optimal</SamAccountName>
+                    <UserPrincipalName>usr.Optimal@PowerShellDemo.com</UserPrincipalName>
+                    <Description>Beschrijving Optimale settings user account</Description>
+                    <DisplayName>DisplayName usr Optimal</DisplayName>
+                    <GivenName>usr</GivenName>
+                    <SurName>Optimal</SurName>
+                    <Enabled>True</Enabled>
+                    <Password>*</Password>
+                </User>
+                 <!-- A user account with maximum number of properties set for a normal user account -->
+                <User name="usr.Maximal">
+                    <AccountExpirationDate>2012-01-02T14:13:12.0000000</AccountExpirationDate>
+                    <AccountNotDelegated>True</AccountNotDelegated>
+                    <AccountPassword>*</AccountPassword>
+                    <AllowReversiblePasswordEncryption>True</AllowReversiblePasswordEncryption>
+                    <AuthType>Negotiate</AuthType>
+                    <CannotChangePassword>True</CannotChangePassword>
+                    <ChangePasswordAtLogon>True</ChangePasswordAtLogon>
+                    <City>Stad</City>
+                    <Company>Bedrijf</Company>
+                    <CompoundIdentitySupported>True</CompoundIdentitySupported>
+                    <Country>NL</Country>
+                    <Department>Afdeling</Department>
+                    <Description>Fully populated user account with all possible values filled.</Description>
+                    <DisplayName>Display usr.Maximal</DisplayName>
+                    <Division>Divisie</Division>
+                    <EmailAddress>Email@address.nl</EmailAddress>
+                    <EmployeeID>12345</EmployeeID>
+                    <EmployeeNumber>45</EmployeeNumber>
+                    <Enabled>True</Enabled>
+                    <Fax>040-4567890</Fax>
+                    <GivenName>Voornaam</GivenName>
+                    <HomeDirectory>\\Server1\Home$\User</HomeDirectory>
+                    <HomeDrive>M:</HomeDrive>
+                    <HomePage>http:\\Server1\MyHome</HomePage>
+                    <HomePhone>040-1234567</HomePhone>
+                    <Initials>I.n.i.</Initials>
+                    <KerberosEncryptionType>AES256</KerberosEncryptionType>
+                    <LogonWorkstations>WS1,ws2,ws3</LogonWorkstations>
+                    <Manager>usr.Minimal</Manager>
+                    <MobilePhone>06-12345678</MobilePhone>
+                    <Office>Kantoor</Office>
+                    <OfficePhone>040-23456789</OfficePhone>
+                    <Organization>Organisatie</Organization>
+                    <OtherAttributes>@{adminDescription="PowerShell created account";departmentNumber=12;roomNumber=RoomC2-12}</OtherAttributes>
+                    <OtherName>Andere naam</OtherName>
+                    <PasswordNeverExpires>False</PasswordNeverExpires>
+                    <PasswordNotRequired>False</PasswordNotRequired>
+                    <POBox>Postbus 12</POBox>
+                    <PostalCode>1234 AB</PostalCode>
+                    <PrincipalsAllowedToDelegateToAccount>usr.Minimal</PrincipalsAllowedToDelegateToAccount>
+                    <ProfilePath>\\Server1\Profiles\User</ProfilePath>
+                    <SamAccountName>usr.Maximal</SamAccountName>
+                    <ScriptPath>\\Server1\Scripts\LogonUser.vbs</ScriptPath>
+                    <SmartcardLogonRequired>True</SmartcardLogonRequired>
+                    <State>Provincie</State>
+                    <StreetAddress>Adreslaan 1</StreetAddress>
+                    <Surname>Achternaam</Surname>
+                    <Title>Titel</Title>
+                    <TrustedForDelegation>True</TrustedForDelegation>
+                    <Type>user</Type>
+                    <UserPrincipalName>usr.Maximal@PowerShellDemo.com</UserPrincipalName>
+<!--
+                    <ServicePrincipalNames>@{Add=HOST/Maximal}</ServicePrincipalNames>
+-->
+                    <GroupMembership>
+                      <MemberOf name="grp.MinGroup" />
+                      <MemberOf name="grp.NormGroup" />
+                      <MemberOf name="grp.MaxGroup" />
+                      <MemberOf name="grp.DistrGroup" />
+                    </GroupMembership>
+                </User>
+            </OU>
+          </OU>
+        </OU>
+       </OUs>
+    </domain>
+   </domains>
+</forest>

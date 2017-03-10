@@ -1,0 +1,68 @@
+<?xml version="1.0"?>
+<!--  Active Directory Domain Inventory  -->
+<forest name="PowerShellDemo.com" distinguishedName="DC=PowerShellDemo,DC=com">
+  <domains>
+    <domain name="PowerShellDemo" distinguishedName="DC=PowerShellDemo,DC=com" dnsname="PowerShellDemo.com">
+      <OUs>
+        <OU name="Org">
+        <OU name="Groups" description="Placeholder OU for Active Directory Groups">
+            <OU name="Administration" description="OU containing Administration Groups">
+                <!-- Example group with minimal properties set -->
+                <Group name="svc.MinGroup">
+                    <GroupScope>DomainLocal</GroupScope>
+                </Group>
+
+                <!-- Example group with normal properties set -->
+                <Group name="svc.NormGroup">
+                    <GroupScope>Global</GroupScope>
+
+                    <AuthType>Negotiate</AuthType>
+                    <Description>Beschrijving svc.NormGroup</Description>
+                    <DisplayName>Display name group svc.NormGroup</DisplayName>
+                    <GroupCategory>Security</GroupCategory>
+                    <SamAccountName>svc.NormGroup</SamAccountName>
+                </Group>
+
+                <!-- Example Distribution group with normal properties set -->
+                <Group name="svc.DistrGroup">
+                    <GroupScope>Global</GroupScope>
+
+                    <AuthType>Negotiate</AuthType>
+                    <Description>Beschrijving svc.DistrGroup</Description>
+                    <DisplayName>Display name group svc.DistrGroup</DisplayName>
+                    <GroupCategory>Distribution</GroupCategory>
+                    <SamAccountName>svc.DistrGroup</SamAccountName>
+                </Group>
+
+
+                <!-- Example group with maximum properties set -->
+                <Group name="svc.MaxGroup">
+                    <GroupScope>Universal</GroupScope>
+
+                    <AuthType>Negotiate</AuthType>
+                    <Description>Beschrijving svc.MaxGroup</Description>
+                    <DisplayName>Display name group svc.MaxGroup</DisplayName>
+                    <GroupCategory>Security</GroupCategory>
+                    <HomePage>http://groups.demo.local/svc.MaxGroup</HomePage>
+                    <ManagedBy>svc.Minimal</ManagedBy>
+                    <OtherAttributes>@{adminDescription="PowerShell created account";info=notes onderin;mail=DemoGroup@rabosvc.com}</OtherAttributes>
+                    <SamAccountName>svc.MaxGroup</SamAccountName>
+
+                </Group>
+            </OU>
+            <OU name="Application" description="OU containing Application Groups" />
+            <OU name="Authorisation" description="OU containing Authorisation Groups" />
+            <OU name="Distribution" description="OU containing Exchange Distribution Groups" />
+            <OU name="General" description="OU containing General Groups" />
+        </OU>
+        </OU>
+      </OUs>
+    </domain>
+
+  </domains>
+</forest>
+
+
+
+
+
