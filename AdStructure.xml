@@ -4,8 +4,8 @@
   <parameters>
     <FFL>6</FFL>  <!-- FFL 6 = WS 2012 R2 -->
     <FSMO>
-      <Schema>DC2</Schema>
-      <Naming>DC2</Naming>
+      <Schema>DC1</Schema>
+      <Naming>DC1</Naming>
     </FSMO>
   </parameters>
   <sites>
@@ -36,7 +36,7 @@
       <OtherAttributes>@{siteObject=CN=Site1,CN=Sites,CN=Configuration,DC=PowerShellDemo,DC=com}</OtherAttributes>
       <Description>DC LAN Site1</Description>
     </subnet>
-    <subnet name="192.168.22.0/24">
+    <subnet name="192.168.42.0/24">
       <OtherAttributes>@{siteObject=CN=Site2,CN=Sites,CN=Configuration,DC=PowerShellDemo,DC=com}</OtherAttributes>
       <Description>DC LAN Site2</Description>
     </subnet>
@@ -46,36 +46,67 @@
       <parameters>
         <DFL>6</DFL>  <!-- DFL 6 = WS 2012 R2 -->
         <FSMO>
-          <PDC>DC2</PDC>
-          <RID>DC2</RID>
-           <IM>DC2</IM>
+          <PDC>DC1</PDC>
+          <RID>DC1</RID>
+           <IM>DC1</IM>
         </FSMO>
       </parameters>
       <DCs>
         <DC name="DC1">
-          <ReplicationSourceDC>DC2.PowerShellDemo.com</ReplicationSourceDC>
           <DNS>
             <Forwarders>
-              <IPAddress>168.63.129.16,84.25.18.140,212.54.44.54</IPAddress>
-              <UseRootHint>False</UseRootHint>
-              <TimeOut>5</TimeOut>
-              <EnableReordering>True</EnableReordering>
-            </Forwarders>
-            <ConditionalForwarders>
-            </ConditionalForwarders>
-          </DNS>
-        </DC>
-        <DC name="DC2">
-          <DNS>
-            <Forwarders>
-              <IPAddress>168.63.129.16,84.25.18.140,212.54.44.54</IPAddress>
-              <UseRootHint>False</UseRootHint>
+              <IPAddress>8.8.8.8,8.8.4.4</IPAddress>
+              <UseRootHint>True</UseRootHint>
               <TimeOut>4</TimeOut>
               <EnableReordering>True</EnableReordering>
             </Forwarders>
             <ConditionalForwarders>
             </ConditionalForwarders>
           </DNS>
+		  <NICS>
+		    <NIC MacAddress="00-15-5D-10-40-04" Name="Ethernet">
+			  <NetIPAddress>
+			    <IPAddress>192.168.40.4</IPAddress>
+			    <PrefixLength>24</PrefixLength>
+			    <DefaultGateway>192.168.40.1</DefaultGateway>
+			  </NetIPAddress>
+			  <DnsClient>
+			    <ConnectionSpecificSuffix>lng.local</ConnectionSpecificSuffix>
+			  </DnsClient>
+			  <DnsClientServerAddress>
+			    <ServerAddresses>192.168.42.4,192.168.40.4</ServerAddresses>
+			  </DnsClientServerAddress>
+			</NIC>
+	      </NICS>
+
+        </DC>
+        <DC name="DC2">
+          <ReplicationSourceDC>DC1.PowerShellDemo.com</ReplicationSourceDC>
+          <DNS>
+            <Forwarders>
+              <IPAddress>8.8.8.8,8.8.4.4</IPAddress>
+              <UseRootHint>True</UseRootHint>
+              <TimeOut>5</TimeOut>
+              <EnableReordering>True</EnableReordering>
+            </Forwarders>
+            <ConditionalForwarders>
+            </ConditionalForwarders>
+          </DNS>
+		  <NICS>
+		    <NIC MacAddress="00-15-5D-10-42-04" Name="Ethernet">
+			  <NetIPAddress>
+			    <IPAddress>192.168.42.4</IPAddress>
+			    <PrefixLength>24</PrefixLength>
+			    <DefaultGateway>192.168.42.1</DefaultGateway>
+			  </NetIPAddress>
+			  <DnsClient>
+			    <ConnectionSpecificSuffix>lng.local</ConnectionSpecificSuffix>
+			  </DnsClient>
+			  <DnsClientServerAddress>
+			    <ServerAddresses>192.168.40.4,192.168.42.4</ServerAddresses>
+			  </DnsClientServerAddress>
+			</NIC>
+	      </NICS>
         </DC>
         <parameters>
           <DatabasePath>C:\NTDS\Data</DatabasePath>
@@ -99,7 +130,7 @@
               <NoRefreshInterval>7.00:00:00</NoRefreshInterval>
             </Aging>
           </zone>
-           <zone NetworkID="192.168.20.0/24">
+           <zone NetworkID="192.168.40.0/24">
             <ReplicationScope>Domain</ReplicationScope>
             <DynamicUpdate>Secure</DynamicUpdate>
             <Aging>
@@ -108,7 +139,7 @@
               <NoRefreshInterval>7.00:00:00</NoRefreshInterval>
             </Aging>
           </zone>
-           <zone NetworkID="192.168.40.0/24">
+           <zone NetworkID="192.168.42.0/24">
             <ReplicationScope>Domain</ReplicationScope>
             <DynamicUpdate>Secure</DynamicUpdate>
             <Aging>
