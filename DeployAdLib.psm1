@@ -7,10 +7,11 @@
    Author : Ben van Zanten
    Company: Valid
    Date   : Dec 2015
-   Version: 1.1
+   Version: 1.2
 
    History:  1.0  Initial version
              1.1  Added Convert-HtToString
+             1.2  Added Get-FileEncoding
 #>
 
 Function Test-AdminStatus {
@@ -162,10 +163,12 @@ Function Get-ADXmlOU ($Element) {
   Converts an XML Element to a Hash table
 #>
 Function Convert-XmlToHT {
-    PARAM([System.Xml.XmlElement]$XmlObject)
+    PARAM(
+        [System.Xml.XmlElement]$XmlObject,
+        [System.Collections.Hashtable]$HashTable = @{}
+    )
 
-    $newHT = @{}
-    $XmlObject.PSObject.Properties | ? { $_.TypeNameOfValue -notmatch 'System.Xml'} | ? { $_.Name -notin "BaseURI","OuterXML","IsReadOnly","HasChildnodes", "Value","InnerText","InnerXml","HasAttributes","IsEmpty","Prefix","NamespaceURI","LocalName","Password" }  | ForEach-Object {
+    $XmlObject.PSObject.Properties | Where-Object { $_.TypeNameOfValue -notmatch 'System.Xml'} | Where-Object { $_.Name -notin "BaseURI","OuterXML","IsReadOnly","HasChildnodes", "Value","InnerText","InnerXml","HasAttributes","IsEmpty","Prefix","NamespaceURI","LocalName","Password" }  | ForEach-Object {
         #
         # Translate "True" and "False" into booleans, but [System.Boolean]"False"  returns: True
         #
@@ -175,8 +178,8 @@ Function Convert-XmlToHT {
         $Value=$_.Value
 
         switch -Regex ($Value) {
-            "true"  { $newHT[$KeyName] = $True }
-            "false" { $newHT[$KeyName] = $False }
+            "true"  { $HashTable[$KeyName] = $True }
+            "false" { $HashTable[$KeyName] = $False }
             #
             # Hashtable:  the Property OtherAttributes requires a hashtable, (so we get a hashtable within a hashtable)
             #             however the  property seems to require a string in the form of a hashtable - that doesn't work. Has to be a hashtable as well.
@@ -197,16 +200,71 @@ Function Convert-XmlToHT {
                             }
                             $subHT[$SubKeyName] = $SubValue
                         }
-                        $newHT[$KeyName] = $subHT
+                        $HashTable[$KeyName] = $subHT
                     } else {
-                        $newHT[$KeyName] = $Value
+                        $HashTable[$KeyName] = $Value
                     }
                     }
-            default { $newHT[$KeyName] = $Value }
+            default { $HashTable[$KeyName] = $Value }
         }
     }
 
-    return $newHT
+    return $HashTable
+}
+
+<#
+.Synopsis
+  Converts a Hash table to an XML element
+.Description
+  Converts a Hash table to an XML element
+.LINK 
+  from: https://gallery.technet.microsoft.com/scriptcenter/Export-Hashtable-to-xml-in-122fda31
+#>
+Function Convert-HashTableToXml {
+[cmdletbinding()]
+    Param (
+        [ValidateNotNullOrEmpty()]
+        [System.String]$Root,
+        
+        [Parameter(ValueFromPipeline = $true, Position = 0)]
+        [System.Collections.Hashtable]$InputObject,
+        
+        [ValidateScript({Test-Path $_ -IsValid})]
+        [System.String]$Path
+    )
+    Begin {
+        $ScriptBlock = {
+            Param($Elem, $Root)
+            if ($Elem.Value -is [Array]) {
+                $Elem.Value | Foreach-Object {
+                    $ScriptBlock.Invoke(@(@{$Elem.Key=$_}, $Root))
+                }
+            }
+            if ( $Elem.Value -is [System.Collections.Hashtable] ) {
+                $RootNode = $Root.AppendChild($Doc.CreateNode([System.Xml.XmlNodeType]::Element,$Elem.Key,$Null))
+                $Elem.Value.GetEnumerator() | ForEach-Object {
+                    $Scriptblock.Invoke( @($_, $RootNode) )
+                }
+            }
+            else {
+                $Element = $Doc.CreateElement($Elem.Key)
+                $Element.InnerText = if ($Elem.Value -is [Array]) {
+                    $Elem.Value -join ','
+                }
+                else {
+                    $Elem.Value | Out-String
+                }
+                $Root.AppendChild($Element) | Out-Null	
+            }
+        }	
+    }
+    Process {
+        $Doc = [xml]"<$($Root)></$($Root)>"
+        $InputObject.GetEnumerator() | ForEach-Object {
+            $scriptblock.Invoke( @($_, $doc.DocumentElement) )
+        }
+        $doc.Save($Path)
+    }
 }
 
 
@@ -254,6 +312,141 @@ Function Convert-HtToString {
       )
 
 }
+
+<#
+.SYNOPSIS
+  Gets file encoding.
+.DESCRIPTION
+  The Get-FileEncoding function determines encoding by looking at Byte Order Mark (BOM).
+  Based on port of C# code from http://www.west-wind.com/Weblog/posts/197245.aspx
+.EXAMPLE
+  Get-ChildItem  *.ps1 | select FullName, @{n='Encoding';e={Get-FileEncoding $_.FullName}} | where {$_.Encoding -ne 'ASCII'}
+  This command gets ps1 files in current directory where encoding is not ASCII
+.EXAMPLE
+  Get-ChildItem  *.ps1 | select FullName, @{n='Encoding';e={Get-FileEncoding $_.FullName}} | where {$_.Encoding -ne 'ASCII'} | foreach {(get-content $_.FullName) | set-content $_.FullName -Encoding ASCII}
+  Same as previous example but fixes encoding using set-content
+.LINK
+  http://poshcode.org/2059
+#>
+function Get-FileEncoding
+{
+    [CmdletBinding()] Param (
+     [Parameter(Mandatory = $True, ValueFromPipelineByPropertyName = $True)] [string]$Path
+    )
+
+    [byte[]]$byte = get-content -Encoding byte -ReadCount 4 -TotalCount 4 -Path $Path
+
+    if ( $byte[0] -eq 0xef -and $byte[1] -eq 0xbb -and $byte[2] -eq 0xbf )
+    { Write-Output 'UTF8' }
+    elseif ($byte[0] -eq 0xfe -and $byte[1] -eq 0xff)
+    { Write-Output 'Unicode' }
+    elseif ($byte[0] -eq 0 -and $byte[1] -eq 0 -and $byte[2] -eq 0xfe -and $byte[3] -eq 0xff)
+    { Write-Output 'UTF32' }
+    elseif ($byte[0] -eq 0x2b -and $byte[1] -eq 0x2f -and $byte[2] -eq 0x76)
+    { Write-Output 'UTF7'}
+    else
+    { Write-Output 'ASCII' }
+}
+
+<#
+.Example
+
+ Format-XML ([xml](cat c:\ps\r_and_j.xml)) -indent 4
+#>
+function Format-XML ([xml]$xml, $indent=2) 
+{ 
+    $StringWriter = New-Object System.IO.StringWriter 
+    $XmlWriter = New-Object System.XMl.XmlTextWriter $StringWriter 
+    $xmlWriter.Formatting = “indented” 
+    $xmlWriter.Indentation = $Indent 
+    $xml.WriteContentTo($XmlWriter) 
+    $XmlWriter.Flush() 
+    $StringWriter.Flush() 
+    Write-Output $StringWriter.ToString() 
+}
+
+
+
+# -----------------------------------------------------------------------------
+# Script: Get-FileMetaDataReturnObject.ps1
+# Author: ed wilson, msft
+# Date: 01/24/2014 12:30:18
+# Keywords: Metadata, Storage, Files
+# comments: Uses the Shell.APplication object to get file metadata
+# Gets all the metadata and returns a custom PSObject
+# it is a bit slow right now, because I need to check all 266 fields
+# for each file, and then create a custom object and emit it.
+# If used, use a variable to store the returned objects before attempting
+# to do any sorting, filtering, and formatting of the output.
+# To do a recursive lookup of all metadata on all files, use this type
+# of syntax to call the function:
+# Get-FileMetaData -folder (gci e:\music -Recurse -Directory).FullName
+# note: this MUST point to a folder, and not to a file.
+# -----------------------------------------------------------------------------
+Function Get-FileMetaData
+{
+  <#
+   .Synopsis
+    This function gets file metadata and returns it as a custom PS Object 
+   .Description
+    This function gets file metadata using the Shell.Application object and
+    returns a custom PSObject object that can be sorted, filtered or otherwise
+    manipulated.
+   .Example
+    Get-FileMetaData -folder "e:\music"
+    Gets file metadata for all files in the e:\music directory
+   .Example
+    Get-FileMetaData -folder (gci e:\music -Recurse -Directory).FullName
+    This example uses the Get-ChildItem cmdlet to do a recursive lookup of 
+    all directories in the e:\music folder and then it goes through and gets
+    all of the file metada for all the files in the directories and in the 
+    subdirectories.  
+   .Example
+    Get-FileMetaData -folder "c:\fso","E:\music\Big Boi"
+    Gets file metadata from files in both the c:\fso directory and the
+    e:\music\big boi directory.
+   .Example
+    $meta = Get-FileMetaData -folder "E:\music"
+    This example gets file metadata from all files in the root of the
+    e:\music directory and stores the returned custom objects in a $meta 
+    variable for later processing and manipulation.
+   .Parameter Folder
+    The folder that is parsed for files 
+   .Notes
+    NAME:  Get-FileMetaData
+    AUTHOR: ed wilson, msft
+    LASTEDIT: 01/24/2014 14:08:24
+    KEYWORDS: Storage, Files, Metadata
+    HSG: HSG-2-5-14
+   .Link
+     Http://www.ScriptingGuys.com
+ #Requires -Version 2.0
+ #>
+
+ Param([string]$File)
+
+    $Folder = Split-Path $File -Parent
+    $FileName = Split-Path $File -Leaf
+
+   $a = 0
+   $objShell = New-Object -ComObject Shell.Application
+   $objFolder = $objShell.namespace($Folder)
+
+   foreach ($oFile in ($objfolder.Items() | Where-Object { $_.Name -eq $FileName }))  { 
+     $FileMetaData = New-Object PSOBJECT
+      for ($a ; $a  -le 266; $a++) { 
+         if($objFolder.getDetailsOf($oFile, $a)) {
+             $hash += @{$($objFolder.getDetailsOf($objFolder.items, $a))  =
+                   $($objFolder.getDetailsOf($oFile, $a)) }
+            $FileMetaData | Add-Member $hash
+            $hash.clear() 
+           } #end if
+       } #end for 
+     $a=0
+     $FileMetaData
+    } #end foreach $file
+} #end Get-FileMetaData
+
 
 
 #
@@ -413,10 +606,8 @@ Convert-IPv4MaskToNetwork -IPAddress 57.192.223.221 "255.255.192.0"
 
     Param
     (
-        [string]
-        $IPAddress,
-        [string]
-        $SubnetMask
+        [string]$IPAddress,
+        [string]$SubnetMask
     )
 
     [int64]$subnetMaskInt64 = Convert-Ipv4ToInt64 -IpAddress $SubnetMask
