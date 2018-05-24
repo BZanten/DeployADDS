@@ -1,14 +1,14 @@
-﻿<#
+<#
 .Synopsis
    Creates OU structure, according to an XML input file.
 .DESCRIPTION
    Creates OU structure, according to an XML input file.
 .EXAMPLE
-  .\Create-OUStructure.ps1 -XmlFile .\ADStructure_RaboSvc.com.xml -WhatIf
+  .\Create-OUStructure.ps1 -XmlFile .\ADStructure_Contoso.com.xml -WhatIf
   Performs a -WhatIf on the script, the XML file is parsed, for each OU found it is shown whether the OU already exists, and if the OU would be created.
 .NOTES
    Author : Ben van Zanten
-   Company: Rabobank International
+   Company: Valid
    Date   : Dec 2015
    Version: 1.0
 
@@ -28,7 +28,7 @@
                    [ValidateScript({Test-Path $_})]
         [string]$XmlFile='.\ADStructure.xml',
 
-    # Name of the domain. For instance  rabonet,  eu, am, ap or oc. If not given, the domain from the XML is used
+    # Name of the domain. For instance  Contoso. If not given, the domain from the XML is used
     [Parameter(Mandatory=$False,Position=2)]
     [string]$DomainName
     )
@@ -95,4 +95,5 @@ $domXML.OUs.OU |  ForEach-Object {
 Get-ADOrganizationalUnit -Filter * -Properties ProtectedFromAccidentalDeletion | where {$_.ProtectedFromAccidentalDeletion -eq $false} | Select DistinguishedName,ProtectedFromAccidentalDeletion | Format-Table
 Get-ADOrganizationalUnit -Filter * -Properties ProtectedFromAccidentalDeletion | where {$_.ProtectedFromAccidentalDeletion -eq $false} | Set-ADOrganizationalUnit -ProtectedFromAccidentalDeletion $True
 Get-ADOrganizationalUnit -Filter * -Properties ProtectedFromAccidentalDeletion | Select DistinguishedName,ProtectedFromAccidentalDeletion | Format-Table
+
 

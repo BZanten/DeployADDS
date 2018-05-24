@@ -1,12 +1,13 @@
-﻿<#
+<#
 .Synopsis
    Adds User accounts to groups
 .DESCRIPTION
    Reads the AD Configuration XML (Default: ADStructure.xml)  and adds user accounts to groups.
 .EXAMPLE
+.\AddUserToGroups.ps1 -XmlFile ...
 .NOTES
    Author : Ben van Zanten
-   Company: Rabobank International
+   Company: Valid
    Date   : Dec 2015
    Version: 1.0
 
@@ -26,7 +27,7 @@
                    [ValidateScript({Test-Path $_})]
         [string]$XmlFile='.\ADStructure.xml',
 
-    # Name of the domain. For instance  rabonet,  eu, am, ap or oc. If not given, the domain from the XML is used
+    # Name of the domain. For instance  contoso If not given, the domain from the XML is used
     [Parameter(Mandatory=$False,Position=2)]
     [string]$DomainName
     )

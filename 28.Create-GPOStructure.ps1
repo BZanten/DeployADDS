@@ -1,10 +1,10 @@
-﻿<#
+<#
 .Synopsis
 .DESCRIPTION
 .EXAMPLE
 .NOTES
    Author : Ben van Zanten
-   Company: Rabobank International
+   Company: Valid
    Date   : Dec 2015
    Version: 1.0
 
@@ -24,7 +24,7 @@
                    [ValidateScript({Test-Path $_})]
         [string]$XmlFile='.\ADStructure.xml',
 
-    # Name of the domain. For instance  rabonet,  eu, am, ap or oc. If not given, the domain from the XML is used
+    # Name of the domain. For instance  Contoso. If not given, the domain from the XML is used
     [Parameter(Mandatory=$False,Position=2)]
     [string]$DomainName
     )
@@ -77,7 +77,7 @@
         Get-ADObject -LDAPFilter "(&(objectClass=groupPolicyContainer)(displayName=Svc.bup.AccountsSettings-TFS))"           | Set-ADObject -Replace @{flags=2}
         Get-ADObject -LDAPFilter "(&(objectClass=groupPolicyContainer)(displayName=Svc.fup.AdministrationAccountsSettings))" | Set-ADObject -Replace @{flags=2}
         Get-ADObject -LDAPFilter "(&(objectClass=groupPolicyContainer)(displayName=Svc.fcp.ServerSettings))"                 | Set-ADObject -Replace @{flags=1}
-        Get-ADObject -LDAPFilter "(&(objectClass=groupPolicyContainer)(displayName=Svc.bp.ServerSettings-GCS))"              | Set-ADObject -Replace @{flags=1}
+        Get-ADObject -LDAPFilter "(&(objectClass=groupPolicyContainer)(displayName=Svc.bcp.ServerSettings-TFS))"             | Set-ADObject -Replace @{flags=1}
         Get-ADObject -LDAPFilter "(&(objectClass=groupPolicyContainer)(displayName=Svc.fcp.SystemSettings))"                 | Set-ADObject -Replace @{flags=1}
         Get-ADObject -LDAPFilter "(&(objectClass=groupPolicyContainer)(displayName=Svc.fcp.TerminalSettings))"               | Set-ADObject -Replace @{flags=1}
         Get-ADObject -LDAPFilter "(&(objectClass=groupPolicyContainer)(displayName=Svc.fcp.ServerBitLocker))"                | Set-ADObject -Replace @{flags=1}
@@ -126,3 +126,5 @@
         $BckResult = Backup-GPO -Name "Default Domain Controllers Policy" -Path E:\Backups\GPO\DefaultDCs -Comment "Initial Backup" -Domain $domXML.dnsname
         Import-GPO -BackupId $BckResult.Id -Path E:\Backups\GPO\DefaultDCs -TargetName "Svc.fcp.DomainControllers"
     }
+
+

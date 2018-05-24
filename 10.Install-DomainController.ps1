@@ -1,4 +1,4 @@
-<#
+ï»¿<#
 .Synopsis
    Installs DFirst DC in a new domain in a new Forest
 .DESCRIPTION
@@ -9,7 +9,7 @@
 .NOTES
    Author : Ben van Zanten
    Company: Valid
-   Date   : Jan 2015
+   Date   : Dec 2015
    Version: 1.0
 
    History:  1.0  Initial version
@@ -57,8 +57,8 @@
         #  Here starts the real work...
         #
         
-        $Pwd = Read-Host -Prompt "Password for Safemode Administrator :" –AsSecureString
-        # $Pwd = ConvertTo-SecureString "Password1" -AsPlaintext –Force
+        # $Pwd = Read-Host -Prompt "Password for Safemode Administrator :" â€“AsSecureString
+        $Pwd = ConvertTo-SecureString "Password1" -AsPlaintext â€“Force
 
         $ComputerName = [System.Environment]::MachineName
 
@@ -94,7 +94,7 @@
             #
             # https://technet.microsoft.com/en-us/library/hh974720(v=wps.630).aspx
             # Parameter Set: ADDSForest
-            # Install-ADDSForest -DomainName  [-CreateDnsDelegation] [-DatabasePath  ] [-DnsDelegationCredential  ] [-DomainMode  ] [-DomainNetbiosName  ] [-Force] [-ForestMode  ] [-InstallDns] [-LogPath  ] [-NoDnsOnNetwork] [-NoRebootOnCompletion] [-SafeModeAdministratorPassword  ] [-SkipAutoConfigureDns] [-SkipPreChecks] [-SysvolPath  ] [-Confirm] [-WhatIf] [ ]
+            # Install-ADDSForest -DomainName <String> [-CreateDnsDelegation] [-DatabasePath <String> ] [-DnsDelegationCredential <PSCredential> ] [-DomainMode <DomainMode> ] [-DomainNetbiosName <String> ] [-Force] [-ForestMode <ForestMode> ] [-InstallDns] [-LogPath <String> ] [-NoDnsOnNetwork] [-NoRebootOnCompletion] [-SafeModeAdministratorPassword <SecureString> ] [-SkipAutoConfigureDns] [-SkipPreChecks] [-SysvolPath <String> ] [-Confirm] [-WhatIf] [ <CommonParameters>]
             #
             # Add specific parameters in case of a new forest...
 
@@ -118,10 +118,10 @@
             #
             # https://technet.microsoft.com/en-us/library/hh974722(v=wps.630).aspx
             # Parameter Set: ADDSDomain
-            # Install-ADDSDomain -NewDomainName  -ParentDomainName  [-ADPrepCredential  ] [-AllowDomainReinstall] [-CreateDnsDelegation] [-Credential  ] [-DatabasePath  ] [-DnsDelegationCredential  ] [-DomainMode  ] [-DomainType  ] [-Force] [-InstallDns] [-LogPath  ] [-NewDomainNetbiosName  ] [-NoDnsOnNetwork] [-NoGlobalCatalog] [-NoRebootOnCompletion] [-ReplicationSourceDC  ] [-SafeModeAdministratorPassword  ] [-SiteName  ] [-SkipAutoConfigureDns] [-SkipPreChecks] [-SysvolPath  ] [-Confirm] [-WhatIf] [ ]
-            # -NewDomainName     If the value set for -DomainType is set to "TreeDomain", this parameter can be used to specify the fully qualified domain name (FQDN) for the new domain tree (for example, "contoso.com"). If the value set for -DomainType is set to "ChildDomain", this parameter can be used to specify a single label domain name for the child domain (for example, specify "corp" to make a new doman "corp.contoso.com" if the new domain is in the contoso.com domain tree).
-            # -ParentDomainName  Specifies the fully qualified domain name (FQDN) of an existing parent domain. 
-            # -DomainType    Indicates the type of domain that you want to create: a new domain tree in an existing forest (supported values are "TreeDomain" or "tree"), a child of an existing domain (supported values are "ChildDomain" or "child"). The default is ChildDomain.
+            # Install-ADDSDomain -NewDomainName <String> -ParentDomainName <String> [-ADPrepCredential <PSCredential> ] [-AllowDomainReinstall] [-CreateDnsDelegation] [-Credential <PSCredential> ] [-DatabasePath <String> ] [-DnsDelegationCredential <PSCredential> ] [-DomainMode <DomainMode> ] [-DomainType <DomainType> ] [-Force] [-InstallDns] [-LogPath <String> ] [-NewDomainNetbiosName <String> ] [-NoDnsOnNetwork] [-NoGlobalCatalog] [-NoRebootOnCompletion] [-ReplicationSourceDC <String> ] [-SafeModeAdministratorPassword <SecureString> ] [-SiteName <String> ] [-SkipAutoConfigureDns] [-SkipPreChecks] [-SysvolPath <String> ] [-Confirm] [-WhatIf] [ <CommonParameters>]
+            # -NewDomainName<String>     If the value set for -DomainType is set to "TreeDomain", this parameter can be used to specify the fully qualified domain name (FQDN) for the new domain tree (for example, "contoso.com"). If the value set for -DomainType is set to "ChildDomain", this parameter can be used to specify a single label domain name for the child domain (for example, specify "corp" to make a new doman "corp.contoso.com" if the new domain is in the contoso.com domain tree).
+            # -ParentDomainName<String>  Specifies the fully qualified domain name (FQDN) of an existing parent domain. 
+            # -DomainType<DomainType>    Indicates the type of domain that you want to create: a new domain tree in an existing forest (supported values are "TreeDomain" or "tree"), a child of an existing domain (supported values are "ChildDomain" or "child"). The default is ChildDomain.
             #
             # Add specific parameters in case of a new domain in existing forest...
 
@@ -175,15 +175,15 @@
             #
             # https://technet.microsoft.com/en-us/library/hh974723(v=wps.630).aspx
             # Parameter Set: ADDSDomainController
-            # Install-ADDSDomainController -DomainName  [-ADPrepCredential  ] [-AllowDomainControllerReinstall] [-ApplicationPartitionsToReplicate  ] [-CreateDnsDelegation] [-Credential  ] [-CriticalReplicationOnly] [-DatabasePath  ] [-DnsDelegationCredential  ] [-Force] [-InstallationMediaPath  ] [-InstallDns] [-LogPath  ] [-MoveInfrastructureOperationMasterRoleIfNecessary] [-NoDnsOnNetwork] [-NoGlobalCatalog] [-NoRebootOnCompletion] [-ReplicationSourceDC  ] [-SafeModeAdministratorPassword  ] [-SiteName  ] [-SkipAutoConfigureDns] [-SkipPreChecks] [-SystemKey  ] [-SysvolPath  ] [-Confirm] [-WhatIf] [ ]
-            #      -InstallationMediaPath
-            #      -ReplicationSourceDC
-            #      -SystemKey   Specifies the system key for the media from which you replicate the data. The default is none.
+            # Install-ADDSDomainController -DomainName <String> [-ADPrepCredential <PSCredential> ] [-AllowDomainControllerReinstall] [-ApplicationPartitionsToReplicate <String[]> ] [-CreateDnsDelegation] [-Credential <PSCredential> ] [-CriticalReplicationOnly] [-DatabasePath <String> ] [-DnsDelegationCredential <PSCredential> ] [-Force] [-InstallationMediaPath <String> ] [-InstallDns] [-LogPath <String> ] [-MoveInfrastructureOperationMasterRoleIfNecessary] [-NoDnsOnNetwork] [-NoGlobalCatalog] [-NoRebootOnCompletion] [-ReplicationSourceDC <String> ] [-SafeModeAdministratorPassword <SecureString> ] [-SiteName <String> ] [-SkipAutoConfigureDns] [-SkipPreChecks] [-SystemKey <SecureString> ] [-SysvolPath <String> ] [-Confirm] [-WhatIf] [ <CommonParameters>]
+            #      -InstallationMediaPath<String>
+            #      -ReplicationSourceDC<String>
+            #      -SystemKey<SecureString>   Specifies the system key for the media from which you replicate the data. The default is none.
             #
             # Add specific parameters in case of a new DC in existing Domain
 
-            Write-Host "About to Promote DC in an existing forest, existing domain, specify Credentials to  join the existing domain"
-            $JoinCred = Get-Credential "$($domXML.dnsname)\Administrator"
+            Write-Host "About to Promote DC in an existing forest, existing domain, specify Credentials to join the existing domain"
+            $JoinCred = Get-Credential -UserName "$($domXML.dnsname)\Administrator" -Message "Specify Credentials to join the existing domain"
 
             $ArgsDcPromo.Add("DomainName"       , $domXML.dnsname            ) # "RaboSvc.com"
             $ArgsDcPromo.Add("Credential"       , $JoinCred              )
@@ -205,7 +205,6 @@
 
         } else {
             # Computername not found in DCs! Error, or update the XML file
-            Write-Error "The current computername $ComputerName is NOT found in the DCs node in $XmlFile."
-        }
+            Write-Error "The current computername $ComputerName is NOT found in the DCs node in $XmlFile."        }
 
     }

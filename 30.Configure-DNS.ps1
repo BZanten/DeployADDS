@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
 .DESCRIPTION
  This script configures DNS Zones, by creating DNS zones where needed, it configures Aging on the DNS zones
@@ -6,10 +6,10 @@
 
  It does not configure DNS forwarding.
 .EXAMPLE
-.\Configure-DNS.ps1 -XmlFile .\ADStructure_RaboSvc.com.xml -Verbose
+.\30.Configure-DNS.ps1 -XmlFile .\ADStructure_Contoso.com.xml -Verbose
 .NOTES
    Author : Ben van Zanten
-   Company: Rabobank International
+   Company: Valid
    Date   : Dec 2015
    Version: 1.0
 
@@ -27,9 +27,9 @@
                    ValueFromPipelineByPropertyName=$false, 
                    ValueFromRemainingArguments=$false)]
                    [ValidateScript({Test-Path $_})]
-        [string]$XmlFile='.\ADStructure_RaboSvc.com.xml',
+        [string]$XmlFile='.\ADStructure_Contoso.com.xml',
 
-    # Name of the domain. For instance  rabonet,  eu, am, ap or oc. If not given, the domain from the XML is used. The XML file supports multiple domains.
+    # Name of the domain. For instance  Contoso. If not given, the domain from the XML is used. The XML file supports multiple domains.
     [Parameter(Mandatory=$False,Position=2)]
     [string]$DomainName
     )
@@ -161,3 +161,5 @@
         }
 
     }
+
+

@@ -1,13 +1,13 @@
-﻿<#
+<#
 .Synopsis
 Creates the PolicyDefinitions folder in SYSVOL in order to store shared ADMX/ADML files.
 .DESCRIPTION
 Creates the PolicyDefinitions folder in SYSVOL in order to store shared ADMX/ADML files.
 .EXAMPLE
-.\Create-PolicyDefinitions -XmlFile ADStructure_RaboSvc.com.xml -Verbose
+.\Create-PolicyDefinitions -XmlFile ADStructure_Contoso.com.xml -Verbose
 .NOTES
    Author : Ben van Zanten
-   Company: Rabobank International
+   Company: Valid
    Date   : Dec 2015
    Version: 1.0
 
@@ -27,7 +27,7 @@ Creates the PolicyDefinitions folder in SYSVOL in order to store shared ADMX/ADM
                    [ValidateScript({Test-Path $_})]
         [string]$XmlFile='.\ADStructure.xml',
 
-    # Name of the domain. For instance  rabonet,  eu, am, ap or oc. If not given, the domain from the XML is used
+    # Name of the domain. For instance  Contoso. If not given, the domain from the XML is used
     [Parameter(Mandatory=$False,Position=2)]
     [string]$DomainName
     )
@@ -53,7 +53,7 @@ Creates the PolicyDefinitions folder in SYSVOL in order to store shared ADMX/ADM
         #
         # Create the GPO Central store.  (PolicyDefinitions folder in E:\SYSVOL\sysvol\<DnsDomainName>\Policies  )
         #
-        $PolDefDir = "{0}\{1}\Policies\PolicyDefinitions" -f ( $domXML.DCs.parameters.SysvolPath,$domXML.dnsname )
+        $PolDefDir = "{0}\sysvol\{1}\Policies\PolicyDefinitions" -f ( $domXML.DCs.parameters.SysvolPath,$domXML.dnsname )
         if (!(Test-Path $PolDefDir)) {
             Write-Verbose "Creating GPO Central store.  (PolicyDefinitions folder: $PolDefDir)"
             New-Item $PolDefDir -ItemType Directory
@@ -61,7 +61,6 @@ Creates the PolicyDefinitions folder in SYSVOL in order to store shared ADMX/ADM
             #.. and fill it.  (/xo = do not overwrite newer files)
             #
             Robocopy $Env:SystemRoot\PolicyDefinitions $PolDefDir /e /xo
-
         } else {
             Write-Verbose "GPO Central store already exists.  (PolicyDefinitions folder: $PolDefDir )"
         }

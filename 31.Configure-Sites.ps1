@@ -1,11 +1,11 @@
-﻿<#
+<#
 .Synopsis
 .DESCRIPTION
 .EXAMPLE
-.\Configure-Sites.ps1 -XmlFile ADStructure_RaboSvc.com.xml -Verbose
+.\Configure-Sites.ps1 -XmlFile ADStructure_Contoso.com.xml -Verbose
 .NOTES
    Author : Ben van Zanten
-   Company: Rabobank International
+   Company: Valid
    Date   : Dec 2015
    Version: 1.0
 
@@ -25,9 +25,12 @@
                    [ValidateScript({Test-Path $_})]
         [string]$XmlFile='.\ADStructure.xml',
 
-    # Name of the domain. For instance  rabonet,  eu, am, ap or oc. If not given, the domain from the XML is used
+    # Name of the domain. For instance  Contoso. If not given, the domain from the XML is used
     [Parameter(Mandatory=$False,Position=2)]
-    [string]$DomainName
+    [string]$DomainName,
+
+    # Moves DCs to the correct site specified in this xml
+    [switch]$MoveDCs
     )
 
     Begin {
@@ -74,17 +77,29 @@
 
 
             if ($Site.NTDSSiteSettings -is [object]) {
-                if (!(Get-ADObject -SearchBase "CN=$($Site.name),CN=Sites,CN=Configuration,$($forxml.forest.distinguishedName)" -LDAPFilter "(objectClass=nTDSSiteSettings)" -ErrorAction SilentlyContinue)) {
+                Try {
+                    $ADObject = Get-ADObject -SearchBase "CN=$($Site.name),CN=Sites,CN=Configuration,$($forxml.forest.distinguishedName)" -LDAPFilter "(objectClass=nTDSSiteSettings)" -SearchScope OneLevel
+                }
+                Catch { }
+                if (!($ADObject)) {
                     New-ADObject -Name "NTDS Site Settings" -Type nTDSSiteSettings -Path "CN=$($Site.name),CN=Sites,CN=Configuration,$($forxml.forest.distinguishedName)"
                 }
             }
             if ($Site.LicensingSiteSettings -is [object]) {
-                if (!(Get-ADObject -SearchBase "CN=$($Site.name),CN=Sites,CN=Configuration,$($forxml.forest.distinguishedName)" -LDAPFilter "(objectClass=licensingSiteSettings)" -ErrorAction SilentlyContinue)) {
+                Try {
+                    $ADObject = Get-ADObject -SearchBase "CN=$($Site.name),CN=Sites,CN=Configuration,$($forxml.forest.distinguishedName)" -LDAPFilter "(objectClass=licensingSiteSettings)" -SearchScope OneLevel
+                }
+                Catch { }
+                if (!($ADObject)) {
                     New-ADObject -Name "Licensing Site Settings" -Type licensingSiteSettings -Path "CN=$($Site.name),CN=Sites,CN=Configuration,$($forxml.forest.distinguishedName)"
                 }
             }
             if ($Site.servers -is [object]) {
-                if (!(Get-ADObject -SearchBase "CN=$($Site.name),CN=Sites,CN=Configuration,$($forxml.forest.distinguishedName)" -LDAPFilter "(objectClass=serversContainer)" -ErrorAction SilentlyContinue)) {
+                Try {
+                    $ADObject = Get-ADObject -SearchBase "CN=$($Site.name),CN=Sites,CN=Configuration,$($forxml.forest.distinguishedName)" -LDAPFilter "(objectClass=serversContainer)" -SearchScope OneLevel
+                }
+                Catch { }
+                if (!($ADObject)) {
                     New-ADObject -Name "Servers" -Type serversContainer -Path "CN=$($Site.name),CN=Sites,CN=Configuration,$($forxml.forest.distinguishedName)"
                 }
             }
@@ -92,9 +107,11 @@
             #
             # Move DC's in this site...
             #
-            ForEach ($DCServer in $Site.servers.server) {
-                Write-Verbose "Moving Site Server $($Site.name)  to site $($Site.name)... "
-                Move-ADDirectoryServer -Identity $DCServer.name -Site $Site.name
+            if ($MoveDCs) {
+                ForEach ($DCServer in $Site.servers.server) {
+                    Write-Verbose "Moving Site Server $($Site.name)  to site $($Site.name)... "
+                    Move-ADDirectoryServer -Identity $DCServer.name -Site $Site.name
+                }
             }
 
         }
@@ -113,7 +130,6 @@
                 $SubnetHT = Convert-XmlToHT $Subnet
                 $SubnetHT["Path"]="CN=Subnets,CN=Sites,CN=Configuration,$($forxml.forest.distinguishedName)"
                 $SubnetHT["type"]='subnet'
-                $SubnetHT
                 New-ADObject @SubnetHT
             } else {
                 Write-Verbose "Subnet: $($Subnet.name) already exists."
@@ -159,3 +175,6 @@
         Get-ADObject -SearchBase "CN=IP,CN=Inter-Site Transports,CN=Sites,CN=Configuration,$($forxml.forest.distinguishedName)" -LDAPFilter "(objectClass=siteLink)" -Properties siteList,replInterval,cost,options,Description | Format-Table -Property Name,replInterval,cost,options,siteList -AutoSize
 
     }
+
+
+
