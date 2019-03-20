@@ -1,6 +1,6 @@
 ﻿<#
 .Synopsis
-   Places a bogus 2 GB file on the root of each local volume.
+   Places a (number of) bogus file(s) on the root of each local volume.
 .DESCRIPTION
    In theory a runaway process may have its log fill out a Disk volume.
    If that happens on the Windows Drive, windows may freeze. If that happens on an application drive, the application may freeze.
@@ -9,14 +9,18 @@
    .\Create-BogusFileOnVolumes.ps1
 .EXAMPLE
    .\Create-BogusFileOnVolumes.ps1 -Size 500MB
-   Overrides the default 2GB filesize. User PowerShell built-in sizes.
+   Overrides the default 2GB filesize. Uses specified size.
+.EXAMPLE
+   .\Create-BogusFileOnVolumes.ps1 -Size 500MB -NumberOfFiles 4
+   Overrides the default 2GB filesize. Creates 4 files of 500MB
 .NOTES
    Author : Ben van Zanten
    Company: Valid
    Date   : Dec 2015
-   Version: 1.0
+   Version: 1.1
 
    History:  1.0  Initial version
+             1.1  Allows to create multiple files instead of one
 #>
 
 [CmdletBinding(SupportsShouldProcess=$true, 
@@ -30,7 +34,15 @@
                    ValueFromPipelineByPropertyName=$false, 
                    ValueFromRemainingArguments=$false, 
                    Position=0)]
-        [int64]$Size=2GB
+        [int64]$Size=500MB,
+
+        [Parameter(Mandatory=$false, 
+                   ValueFromPipeline=$false,
+                   ValueFromPipelineByPropertyName=$false, 
+                   ValueFromRemainingArguments=$false, 
+                   Position=0)]
+        [int]$NumberOfFiles=4
+
     )
 
     Begin {
@@ -47,17 +59,20 @@
         {
             if (-not([string]::IsNullOrEmpty($Drive.DriveLetter))) 
             {
-                if (!(Test-Path "$($Drive.DriveLetter)\PlaceholderFile.bogus")) {
-                    if ($pscmdlet.ShouldProcess($Drive.DriveLetter, "Create $($Size/1MB) MB file"))
-                    {
-                        FSUTIL FILE CREATENEW "$($Drive.DriveLetter)\PlaceholderFile.bogus" $Size
-                        if (!(Test-Path "$($Drive.DriveLetter)\PlaceholderFile.bogus")) {
-                            Write-Error "File $($Drive.DriveLetter)\PlaceholderFile.bogus is not present, command failed !"
-                        } else {
+                for ($i=1;$i -le $NumberOfFiles; $i++) {
+                    $i
+                    if (!(Test-Path "$($Drive.DriveLetter)\PlaceholderFile_$i.bogus")) {
+                        if ($pscmdlet.ShouldProcess($Drive.DriveLetter, "Create $($Size/1MB) MB file"))
+                        {
+                            FSUTIL FILE CREATENEW "$($Drive.DriveLetter)\PlaceholderFile_$i.bogus" $Size
+                            if (!(Test-Path "$($Drive.DriveLetter)\PlaceholderFile_$i.bogus")) {
+                                Write-Error "File $($Drive.DriveLetter)\PlaceholderFile_$i.bogus is not present, command failed !"
+                            } else {
+                            }
                         }
+                    } else {
+                        "Bogus file: $($Drive.DriveLetter)\PlaceholderFile_$i.bogus already exists."
                     }
-                } else {
-                    "Bogus file: $($Drive.DriveLetter)\PlaceholderFile.bogus already exists."
                 }
             }
         }
