@@ -17,8 +17,7 @@
 [CmdletBinding(SupportsShouldProcess=$true, 
                   ConfirmImpact='Medium')]
 
-    Param
-    (
+    Param (
         # Name of the input file, default is: ADStructure.xml
         [Parameter(Mandatory=$false,Position=1, 
                    ValueFromPipeline=$false,
@@ -27,9 +26,9 @@
                    [ValidateScript({Test-Path $_})]
         [string]$XmlFile='.\ADStructure.xml',
 
-    # Name of the domain. For instance  rabonet,  eu, am, ap or oc. If not given, the domain from the XML is used
-    [Parameter(Mandatory=$False,Position=2)]
-    [string]$DomainName
+        # Name of the domain. For instance  rabonet,  eu, am, ap or oc. If not given, the domain from the XML is used
+        [Parameter(Mandatory=$False,Position=2)]
+        [string]$DomainName
     )
 
     Begin {
