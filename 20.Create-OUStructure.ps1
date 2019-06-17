@@ -33,10 +33,13 @@
     [string]$DomainName
     )
 
-
+<#
+.Description
+Creates OU structure according to input XML file
+#>
 Function New-OUfromXML ($Element) {
     [string]$DC = ConvertFrom-ADXmlToDN $Element
-    [string]$name=$Element.name
+    [string]$Name=$Element.Name
 
     # Special case for OU creation: we need the parent OU for the current OU in order to create the current OU as its child.
     if ($Element.ParentNode.name -eq 'OUs') {
@@ -49,9 +52,9 @@ Function New-OUfromXML ($Element) {
     catch { }
 
     if ($ExistingOU) {
-        Write-Output "OU already exists ""$name"" -Path ""$Path"""
+        Write-Output "OU already exists ""$Name"" -Path ""$Path"""
     } else {
-        Write-Output "New-ADOrganizationalUnit -Name ""$name"" -Path ""$Path"""
+        Write-Output "New-ADOrganizationalUnit -Name ""$Name"" -Path ""$Path"""
         New-ADOrganizationalUnit -Name $name -Description "$($Element.description)" -Path $Path
     }
 
@@ -60,8 +63,45 @@ Function New-OUfromXML ($Element) {
         New-OUfromXML $OU
     }
     # Use recursion to get all sub-Containers
-    ForEach ($OU in $Element.CN) {
+    ForEach ($CN in $Element.CN) {
+        New-CNfromXML $CN
+    }
+}
+
+<#
+.Description
+Creates CN structure according to input XML file
+#>
+Function New-CNfromXML ($Element) {
+    [string]$DC = ConvertFrom-ADXmlToDN $Element
+    [string]$Name=$Element.Name
+
+    # Special case for OU creation: we need the parent OU for the current OU in order to create the current OU as its child.
+    if ($Element.ParentNode.name -eq 'OUs') {
+        $Path = "$(ConvertFrom-ADXmlToDN $Element.ParentNode.ParentNode)"
+    } else {
+        $Path = "$(ConvertFrom-ADXmlToDN $Element.ParentNode)"
+    }
+
+    try { $ExistingCN = Get-ADObject -Filter "Name -eq '$name'" -SearchBase "$Path" -SearchScope OneLevel -ErrorAction SilentlyContinue  }
+    catch { }
+
+    if ($ExistingCN) {
+"Get-ADObject -Filter ""Name -eq '$name'"" -SearchBase ""$Path"" -SearchScope OneLevel -ErrorAction SilentlyContinue"
+        Write-Output "CN already exists: ""$Name"" -Path ""$Path"""
+    } else {
+        Write-Output "New-ADObject -Name $Name -Type Container -Description ""$($Element.description)"" -Path $Path"
+        New-ADObject -Name $Name -Type Container -Description "$($Element.description)" -Path $Path
+
+    }
+
+    # Use recursion to get all sub-OUs
+    ForEach ($OU in $Element.OU) {
         New-OUfromXML $OU
+    }
+    # Use recursion to get all sub-Containers
+    ForEach ($CN in $Element.CN) {
+        New-CNfromXML $CN
     }
 }
 
