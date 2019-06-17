@@ -330,7 +330,7 @@ Function ConvertTo-Hashtable {
   #  http://poshcode.org/4968
   # .LINK
   #  
-  PARAM(
+  PARAM (
     # The object to convert to a hashtable
     [Parameter(ValueFromPipeline=$true, Mandatory=$true)]
     $InputObject,
@@ -392,8 +392,7 @@ Function ConvertTo-Hashtable {
 .LINK
   http://poshcode.org/2059
 #>
-function Get-FileEncoding
-{
+Function Get-FileEncoding {
     [CmdletBinding()] Param (
      [Parameter(Mandatory = $True, ValueFromPipelineByPropertyName = $True)] [string]$Path
     )
@@ -417,19 +416,16 @@ function Get-FileEncoding
 
  Format-XML ([xml](cat c:\ps\r_and_j.xml)) -indent 4
 #>
-function Format-XML ([xml]$xml, $indent=2) 
-{ 
+Function Format-XML ([xml]$xml, $indent=2) { 
     $StringWriter = New-Object System.IO.StringWriter 
     $XmlWriter = New-Object System.XMl.XmlTextWriter $StringWriter 
-    $xmlWriter.Formatting = “indented” 
+    $xmlWriter.Formatting = "indented" 
     $xmlWriter.Indentation = $Indent 
     $xml.WriteContentTo($XmlWriter) 
     $XmlWriter.Flush() 
     $StringWriter.Flush() 
     Write-Output $StringWriter.ToString() 
 }
-
-
 
 # -----------------------------------------------------------------------------
 # Script: Get-FileMetaDataReturnObject.ps1
@@ -447,8 +443,7 @@ function Format-XML ([xml]$xml, $indent=2)
 # Get-FileMetaData -folder (gci e:\music -Recurse -Directory).FullName
 # note: this MUST point to a folder, and not to a file.
 # -----------------------------------------------------------------------------
-Function Get-FileMetaData
-{
+Function Get-FileMetaData {
   <#
    .Synopsis
     This function gets file metadata and returns it as a custom PS Object 
@@ -487,7 +482,7 @@ Function Get-FileMetaData
  #Requires -Version 2.0
  #>
 
- Param([string]$File)
+ Param ([string]$File)
 
     $Folder = Split-Path $File -Parent
     $FileName = Split-Path $File -Leaf
@@ -511,7 +506,94 @@ Function Get-FileMetaData
     } #end foreach $file
 } #end Get-FileMetaData
 
+# From: https://github.com/jdhitsolutions/DNSSuffix
+Function Set-PrimaryDNSSuffix {
+  [cmdletbinding(SupportsShouldProcess)]
+  Param(
+      [Parameter(Position = 0, HelpMessage = "Enter the new primary DNS Suffix name e.g. company.pri")]
+      [string]$DNSSuffix,
+      [switch]$SynchronizeSuffix
+  )
+  
+  Process {
+    Write-Verbose "[$((Get-Date).TimeofDay) PROCESS] Setting Primary DNS Suffix"
+    if ($PSCmdlet.ShouldProcess("Change DNSSuffix")) {
+        Try {
+          if ($SynchronizeSuffix) {
+              $Synch = 1
+          }
+          else {
+              $Synch = 0
+          }
+          Set-ItemProperty -path HKLM:\system\CurrentControlSet\Services\tcpip\parameters -Name Domain -Value $DNSSuffix
+          Set-ItemProperty -path HKLM:\system\CurrentControlSet\Services\tcpip\parameters -Name 'NV Domain' -Value $DNSSuffix
+          Set-ItemProperty -path HKLM:\system\CurrentControlSet\Services\tcpip\parameters -Name SyncDomainWithMembership -Value $Synch
+        }
+        Catch {
+            Write-Warning "[$((Get-Date).TimeofDay) PROCESS] Error with command. $($_.Exception.Message)"
+        }
+    }
+  } #process
 
+} #close Set-PrimaryDNSSuffix
+
+Function Get-PrimaryDNSSuffix {
+  [cmdletbinding()]
+  [OutputType("PSCustomObject")]
+
+  Param(  )
+
+  Process {
+      
+    Write-Verbose "[$((Get-Date).TimeofDay) PROCESS] Getting Primary DNS Suffix settings."
+
+    Try {
+      $reg = Get-ItemProperty  HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters 
+      [pscustomobject]@{
+          Computername = $reg.hostname
+          Domain       = $reg.Domain
+          'NV Domain'  = $reg.'NV Domain'
+          SynchronizeSuffix = $reg.SyncDomainWithMembership -as [Bool]
+      }
+    }
+    Catch {
+        write-warning "[$((Get-Date).TimeofDay) PROCESS] Error with command. $($_.Exception.Message)"
+    }
+
+  } #process
+} #close Get-PrimaryDNSSuffix
+
+<#
+.Description
+  Retrieves info whether the computer is domain joined yes or no
+.Link
+  https://docs.microsoft.com/en-us/windows/desktop/cimwin32prov/win32-computersystem
+#>
+Function Get-DomainRole {
+
+  $ComputerInfo = Get-CimInstance -ClassName Win32_ComputerSystem -Namespace Root\CIMV2
+
+  Switch ($ComputerInfo.DomainRole)  {
+    0 { $DomainRoleString = 'Standalone Workstation' }
+    1 { $DomainRoleString = 'Member Workstation' }
+    2 { $DomainRoleString = 'Standalone Server' }
+    3 { $DomainRoleString = 'Member Server' }
+    4 { $DomainRoleString = 'Backup Domain Controller' }
+    5 { $DomainRoleString = 'Primary Domain Controller' }
+    default { $DomainRoleString = 'Unknown' }
+  }
+
+  [pscustomobject]@{
+    Name         = $ComputerInfo.Name
+    DNSHostName  = $ComputerInfo.DNSHostName
+    Domain       = $ComputerInfo.Domain
+    DomainRole   = $ComputerInfo.DomainRole
+    DomainRoleStr= $DomainRoleString
+    PartOfDomain = $ComputerInfo.PartOfDomain
+    Workgroup    = $ComputerInfo.Workgroup
+    SynchronizeSuffix = $reg.SyncDomainWithMembership -as [Bool]
+  }
+}
 
 #
 # https://gallery.technet.microsoft.com/scriptcenter/Convert-subnet-mask-7b501479
