@@ -22,10 +22,10 @@ GUID = '6a6e071d-dc48-42bd-a65b-9473ba5f9143'
 Author = 'Ben van Zanten'
 
 # Company or vendor of this module
-CompanyName = 'Valid'
+CompanyName = 'Rabobank International'
 
 # Copyright statement for this module
-Copyright = '(c) 2015-2016 Valid. All rights reserved.'
+Copyright = '(c) 2015-2016 Rabobank International. All rights reserved.'
 
 # Description of the functionality provided by this module
  Description = 'a library of reusable functions for deploying Domain and Domain Controllers.'

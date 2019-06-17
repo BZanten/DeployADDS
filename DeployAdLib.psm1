@@ -5,13 +5,14 @@
    Library of reusable functions for AD Domain and DC deployment
 .NOTES
    Author : Ben van Zanten
-   Company: Valid
+   Company: Rabobank International
    Date   : Dec 2015
-   Version: 1.2
+   Version: 1.3
 
    History:  1.0  Initial version
              1.1  Added Convert-HtToString
              1.2  Added Get-FileEncoding
+             1.3  Added ConvertTo-Hashtable
 #>
 
 Function Test-AdminStatus {
@@ -38,18 +39,23 @@ Function Get-DomainName {
     [Parameter(Mandatory=$False,Position=2)]
     [string]$DomainName
     )
+    Begin {
+        $ComputerName = [System.Environment]::MachineName
+        $ComputerFQDN = ( [System.Net.Dns]::GetHostByName($Computername) ).HostName
+        Write-Verbose "Computername: $ComputerName / $ComputerFQDN"
+    }
 
     Process {
         [xml]$forXML = Get-Content $XmlFile
         if ([string]::IsNullOrEmpty($DomainName)) {
-            # DomainName is not given. Test the XML file. If that contains only 1 domain, this is the domain.
+            Write-Verbose "DomainName is not given. Test the XML file. If that contains only 1 domain, this is the domain."
             if (@($forXML.forest.domains.domain).count -eq 1) {
                 $DomainName = $forXML.forest.domains.domain.name
                 Write-Verbose "Domainname '$DomainName' is determined from single domain mentioned in $XmlFile"
             } else {
-                # Now DomainName is empty AND the XML contains more than one... We can only assume the currentdomain, otherwise fail the job
-                $ComputerName = [System.Environment]::MachineName
-                $Domain = $forxml.forest.domains.domain | ? { $_.DCs.DC.name -eq $ComputerName }
+                Write-Verbose "DomainName is empty AND the XML contains more than one... We can only assume the currentdomain, otherwise fail the job"
+                $Domain = $forxml.forest.domains.domain | Where-Object { $_.DCs.DC.name -eq $ComputerFQDN }
+                if (!($Domain)) { $Domain = $forxml.forest.domains.domain | Where-Object { $_.DCs.DC.name -eq $ComputerName } }
                 if ( $Domain -is [System.Xml.XmlLinkedNode] ) {
                     $DomainName = $Domain.name
                     Write-Verbose "Domainname '$DomainName' is determined from DC mentioned in $XmlFile"
@@ -68,7 +74,7 @@ Function Get-DomainName {
                     $DomainName = ( $forXML.forest.domains.domain | Where-Object { $_.name -eq $DomainName } ).name
                     Write-Verbose "Domainname '$DomainName' is determined from parameter."
                 } else {
-                    Write-Error "Domain cannot be found in the input file $XmlFile... please specify the correct -DomainName as a parameter, or do not use the -DomainName parameter"
+                    Write-Error "Domain cannot be found in the input file $XmlFile... please specify -DomainName as a parameter"
                     break
                 }
             }
@@ -275,7 +281,11 @@ Function Convert-HashTableToXml {
   Converts a Hash table to a string (for use in XML)
 #>
 Function Convert-HtToString {
-    PARAM([System.Collections.Hashtable]$HTInput)
+    PARAM(
+        [Parameter(ValueFromPipeline=$true, Mandatory=$true)]
+        [System.Collections.Hashtable]$HTInput
+    )
+
 
     Function Quote-String  {
     PARAM ([string]$InputStr)
@@ -311,6 +321,60 @@ Function Convert-HtToString {
         }
       )
 
+}
+
+Function ConvertTo-Hashtable {
+  #.Synopsis
+  #   Converts an object to a hashtable of property-name = value 
+  # .LINK
+  #  http://poshcode.org/4968
+  # .LINK
+  #  
+  PARAM(
+    # The object to convert to a hashtable
+    [Parameter(ValueFromPipeline=$true, Mandatory=$true)]
+    $InputObject,
+
+    # Excludes certain properties if required
+    [string[]]$Exclude,
+
+    # Forces the values to be strings and converts them by running them through Out-String
+    [switch]$AsString,  
+
+    # If set, allows each hashtable to have it's own set of properties, otherwise, 
+    # each InputObject is normalized to the properties on the first object in the pipeline
+    [switch]$jagged,
+
+    # If set, empty properties are ommitted
+    [switch]$NoNulls
+  )
+  BEGIN { 
+    $headers = @() 
+  }
+  PROCESS {
+    if(!$headers -or $jagged) {
+      $headers = $InputObject | get-member -type Properties | select -expand name
+    }
+    $output = @{}
+    if($AsString) {
+      foreach($col in $headers) {
+        if ($Exclude -notcontains $col) {
+          if(!$NoNulls -or ($InputObject.$col -is [bool] -or ($InputObject.$col))) {
+            $output.$col = $InputObject.$col | out-string -Width 9999 | % { $_.Trim() }
+          }
+        }
+      }
+    } else {
+      foreach($col in $headers) {
+        if ($Exclude -notcontains $col) {
+          if(!$NoNulls -or ($InputObject.$col -is [bool] -or ($InputObject.$col))) {
+            $output.$col = $InputObject.$col
+          }
+        }
+      }
+    }
+    $output
+  }
 }
 
 <#
