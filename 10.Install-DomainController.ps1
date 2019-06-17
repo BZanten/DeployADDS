@@ -32,10 +32,6 @@
     [string]$DomainName
     )
 
-
-
-
-
     Begin {
         Import-Module .\DeployAdLib.psd1
         # Test for elevation :
@@ -45,7 +41,11 @@
         }
         $domName = Get-DomainName -XmlFile $XmlFile -DomainName $DomainName
         [xml]$forXML = Get-Content $XmlFile
-        $domXML = $forXML.forest.domains.domain | ? { $_.name -eq $domName }
+        $domXML = $forXML.forest.domains.domain | Where-Object { $_.name -eq $domName }
+
+        $ComputerName = [System.Environment]::MachineName
+        $ComputerFQDN = ( [System.Net.Dns]::GetHostByName($Computername) ).HostName
+        Write-Verbose "Computername: $ComputerName / $ComputerFQDN"
 
         $domName
     }
@@ -59,8 +59,6 @@
         
         # $Pwd = Read-Host -Prompt "Password for Safemode Administrator :" –AsSecureString
         $Pwd = ConvertTo-SecureString "Password1" -AsPlaintext –Force
-
-        $ComputerName = [System.Environment]::MachineName
 
         $SiteName = "Default-First-Site-Name"
         $Site = $forXML.forest.sites.site | Where-Object { $_.servers.server.name -match $Env:ComputerName }
@@ -78,6 +76,9 @@
             "SafeModeAdministratorPassword" = $Pwd
         }
 
+        # Todo:  Make InstallDNS optional, from the XML file...
+        $ArgsDcPromo["InstallDns"] = $False
+
         # Install DC binaries if that hasn't been done before...
         if (!(Get-WindowsFeature -Name AD-Domain-Services ).Installed) {
             Install-WindowsFeature -Name AD-Domain-Services,DNS -IncludeManagementTools
@@ -87,8 +88,7 @@
         # If Current computername = FSMO PDC, then create a new Domain in existing forest
         # Otherwise, assume Forest & Domain already present on another machine, Create additional DC in existing Domain.
 
-
-        if ($ComputerName -eq $forXML.forest.parameters.FSMO.Schema) {
+        if ($forXML.forest.parameters.FSMO.Schema -in ($ComputerName,$ComputerFQDN)) {
             #
             # Schema master!!! create a new forest.
             #
@@ -99,7 +99,7 @@
             # Add specific parameters in case of a new forest...
 
             $ArgsDcPromo.Add("DomainName"       , $domXML.dnsname            ) # "RaboSvc.com"
-            $ArgsDcPromo.Add("DomainNetbiosName", $domXML.Name               ) # "RABOSVC"
+            $ArgsDcPromo.Add("DomainNetbiosName", $domXML.NetBiosName        ) # "RABOSVC"
             $ArgsDcPromo.Add("DomainMode"       , $domXML.parameters.DFL     ) # 6   "Win2012R2"
             $ArgsDcPromo.Add("ForestMode"       , $forXML.forest.parameters.FFL ) # 6   "Win2012R2"
 
@@ -112,7 +112,7 @@
             Install-ADDSForest @ArgsDcPromo
 
 
-        } elseif ($ComputerName -eq $domXML.parameters.FSMO.PDC) {
+        } elseif ($domXML.parameters.FSMO.PDCEmulator -in ($ComputerName,$ComputerFQDN)) {
             #
             # PDC!!! Create a new domain in existing forest
             #
@@ -145,12 +145,12 @@
                     $ArgsDcPromo.Add("DomainType", "ChildDomain"                 )
                     $ArgsDcPromo.Add("ParentDomainName", $ParentDom              ) # $parentDom = "rabosvc.com"   dnsname = "eu.rabosvc.com"
                     $ArgsDcPromo.Add("NewDomainName", $domXML.name               ) # "RABOSVC"
-                    $ArgsDcPromo.Add("NewDomainNetbiosName", $domXML.Name        ) # "RABOSVC"
+                    $ArgsDcPromo.Add("NewDomainNetbiosName", $domXML.NetBiosName ) # "RABOSVC"
                 } else {
                     $ArgsDcPromo.Add("DomainType", "TreeDomain"                  )
                     $ArgsDcPromo.Add("ParentDomainName", $ParentDom              ) # $parentDom = "rabosvc.com"   dnsname = "eu.rabosvc.com"
                     $ArgsDcPromo.Add("NewDomainName", $domXML.dnsname            ) # "RaboSvc.com"
-                    $ArgsDcPromo.Add("NewDomainNetbiosName", $domXML.Name        ) # "RABOSVC"
+                    $ArgsDcPromo.Add("NewDomainNetbiosName", $domXML.NetBiosName ) # "RABOSVC"
                 }
             }
 
@@ -169,7 +169,7 @@
             Install-ADDSDomain @ArgsDcPromo
  
 
-        } elseif ($domXML.DCs.dc | Where-Object { $_.Name -eq $ComputerName }) {
+        } elseif ($domXML.DCs.dc | Where-Object { $_.Name -in ($ComputerName,$ComputerFQDN) }) {
             #
             # DC is present in the DCs, so Additional DC in existing Domain
             #
@@ -205,6 +205,7 @@
 
         } else {
             # Computername not found in DCs! Error, or update the XML file
-            Write-Error "The current computername $ComputerName is NOT found in the DCs node in $XmlFile."        }
+            Write-Error "The current computername $ComputerName / $ComputerFQDN is NOT found in the DCs node in $XmlFile."
+        }
 
     }
