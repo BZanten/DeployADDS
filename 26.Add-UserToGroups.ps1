@@ -37,20 +37,20 @@ Function Add-User2GroupsFromXML ($Element) {
     [string]$name=$Element.name
 
     ForEach ($User in $Element.User) {
-        $ExistingUser = Get-ADUser -Filter "Name -eq '$($User.name)'" -SearchBase "$($domXML.distinguishedName)" -SearchScope Subtree  -ErrorAction SilentlyContinue
+        $ExistingUser = Get-ADUser -Filter "Name -eq '$($User.name)'" -SearchBase "$($domXML.distinguishedName)" -SearchScope Subtree -Server $DomainFQDN -ErrorAction SilentlyContinue
         if ($ExistingUser) {
             Write-Host "User found: $($ExistingUser.DistinguishedName)" -ForegroundColor Green
             ForEach( $Group in $User.GroupMembership.MemberOf ) {
-                $ADGroup = Get-ADGroup -Filter "Name -eq '$($Group.name)'" -SearchBase "$($domXML.distinguishedName)" -SearchScope Subtree 
+                $ADGroup = Get-ADGroup -Filter "Name -eq '$($Group.name)'" -SearchBase "$($domXML.distinguishedName)" -SearchScope Subtree -Server $DomainFQDN -ErrorAction SilentlyContinue
                 if ($ADGroup) {
                     Write-Output "  adding user $($User.name) to group $($Group.name)..."
-                    Add-ADGroupMember -Identity $ADGroup -Members $ExistingUser 
+                    Add-ADGroupMember -Identity $ADGroup -Members $ExistingUser -Server $DomainFQDN -ErrorAction SilentlyContinue
                 } else {
                     # Group not found, use empty Searchbase, connecto to GC to make this work
                     $ADGroup = Get-ADGroup -Filter "Name -eq '$($Group.name)'" -SearchBase "" -SearchScope Subtree -Server Localhost:3268
                     if ($ADGroup) {
                         Write-Output "  adding user $($User.name) to group $($Group.name)..."
-                        Add-ADGroupMember -Identity $ADGroup -Members $ExistingUser 
+                        Add-ADGroupMember -Identity $ADGroup -Members $ExistingUser -Server $DomainFQDN
                     } else {
                         Write-Host "Group:  $($Group.name) not found! Check syntax or create group first." -ForegroundColor Red
                     }
@@ -87,6 +87,7 @@ $domName = Get-DomainName -XmlFile $XmlFile -DomainName $DomainName
 [xml]$forXML = Get-Content $XmlFile
 $domXML = $forXML.forest.domains.domain | ? { $_.name -eq $domName }
 
+$DomainFQDN = $domxml.dnsname
 
 #
 #  Here starts the real work...

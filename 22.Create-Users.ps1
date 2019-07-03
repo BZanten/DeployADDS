@@ -41,7 +41,10 @@ Function New-UsersfromXML ($Element) {
     ForEach ($User in $Element.User) {
         $UserHT = Convert-XmlToHT $User
 
-        $ExistingUser = Get-ADUser -Filter "Name -eq '$($User.name)'" -SearchBase "$($domXML.distinguishedName)" -SearchScope Subtree  -ErrorAction SilentlyContinue
+        # Add the server name so we can also do remote domains
+        $UserHT.Add("Server",$DomainFQDN)
+
+        $ExistingUser = Get-ADUser -Filter "Name -eq '$($User.name)'" -SearchBase "$($domXML.distinguishedName)" -SearchScope Subtree -Server $DomainFQDN -ErrorAction SilentlyContinue
         if ($ExistingUser) {
             #
             #  Existing user... update the properties.
@@ -117,6 +120,7 @@ $domName = Get-DomainName -XmlFile $XmlFile -DomainName $DomainName
 [xml]$forXML = Get-Content $XmlFile
 $domXML = $forXML.forest.domains.domain | ? { $_.name -eq $domName }
 
+$DomainFQDN = $domxml.dnsname
 
 #
 #  Here starts the real work...

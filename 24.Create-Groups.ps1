@@ -41,7 +41,10 @@ Function New-GroupsFromXML ($Element) {
     ForEach ($Group in $Element.Group) {
         $GroupHT = Convert-XmlToHT $Group
 
-        if (Get-ADGroup -Filter "Name -eq '$($Group.name)'" -SearchBase "$($domXML.distinguishedName)" -SearchScope Subtree ) {
+        # Add the server name so we can also do remote domains
+        $GroupHT.Add("Server",$DomainFQDN)
+
+        if (Get-ADGroup -Filter "Name -eq '$($Group.name)'" -SearchBase "$($domXML.distinguishedName)" -SearchScope Subtree -Server $DomainFQDN ) {
             #
             #  Existing Group... update the properties.
             #
@@ -97,6 +100,7 @@ $domName = Get-DomainName -XmlFile $XmlFile -DomainName $DomainName
 [xml]$forXML = Get-Content $XmlFile
 $domXML = $forXML.forest.domains.domain | ? { $_.name -eq $domName }
 
+$DomainFQDN = $domxml.dnsname
 
 #
 #  Here starts the real work...

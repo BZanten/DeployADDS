@@ -55,7 +55,7 @@ Function New-OUfromXML ($Element) {
         Write-Output "OU already exists ""$Name"" -Path ""$Path"""
     } else {
         Write-Output "New-ADOrganizationalUnit -Name ""$Name"" -Path ""$Path"""
-        New-ADOrganizationalUnit -Name $name -Description "$($Element.description)" -Path $Path
+        New-ADOrganizationalUnit -Name $name -Description "$($Element.description)" -Path $Path -Server $DomainFQDN
     }
 
     # Use recursion to get all sub-OUs
@@ -91,7 +91,7 @@ Function New-CNfromXML ($Element) {
         Write-Output "CN already exists: ""$Name"" -Path ""$Path"""
     } else {
         Write-Output "New-ADObject -Name $Name -Type Container -Description ""$($Element.description)"" -Path $Path"
-        New-ADObject -Name $Name -Type Container -Description "$($Element.description)" -Path $Path
+        New-ADObject -Name $Name -Type Container -Description "$($Element.description)" -Path $Path -Server $DomainFQDN
 
     }
 
@@ -116,8 +116,11 @@ if (-not(Test-AdminStatus)) {
 }
 
 $domName = Get-DomainName -XmlFile $XmlFile -DomainName $DomainName
+Write-Output "OU structure for domain: $domName"
 [xml]$forXML = Get-Content $XmlFile
-$domXML = $forXML.forest.domains.domain | ? { $_.name -eq $domName }
+$domXML = $forXML.forest.domains.domain | Where-Object { $_.name -eq $domName }
+
+$DomainFQDN = $domxml.dnsname
 
 #
 #  Here starts the real work...
@@ -132,8 +135,8 @@ $domXML.OUs.OU |  ForEach-Object {
 #
 #  Protect all OU's from accidental deletion.
 #
-Get-ADOrganizationalUnit -Filter * -Properties ProtectedFromAccidentalDeletion | where {$_.ProtectedFromAccidentalDeletion -eq $false} | Select DistinguishedName,ProtectedFromAccidentalDeletion | Format-Table
-Get-ADOrganizationalUnit -Filter * -Properties ProtectedFromAccidentalDeletion | where {$_.ProtectedFromAccidentalDeletion -eq $false} | Set-ADOrganizationalUnit -ProtectedFromAccidentalDeletion $True
-Get-ADOrganizationalUnit -Filter * -Properties ProtectedFromAccidentalDeletion | Select DistinguishedName,ProtectedFromAccidentalDeletion | Format-Table
+Get-ADOrganizationalUnit -Filter * -Properties ProtectedFromAccidentalDeletion | Where-Object {$_.ProtectedFromAccidentalDeletion -eq $false} | Select DistinguishedName,ProtectedFromAccidentalDeletion | Format-Table
+Get-ADOrganizationalUnit -Filter * -Properties ProtectedFromAccidentalDeletion | Where-Object {$_.ProtectedFromAccidentalDeletion -eq $false} | Set-ADOrganizationalUnit -ProtectedFromAccidentalDeletion $True
+Get-ADOrganizationalUnit -Filter * -Properties ProtectedFromAccidentalDeletion | Select-Object DistinguishedName,ProtectedFromAccidentalDeletion | Format-Table
 
 
