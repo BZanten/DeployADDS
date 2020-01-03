@@ -48,13 +48,13 @@ Function New-OUfromXML ($Element) {
         $Path = "$(ConvertFrom-ADXmlToDN $Element.ParentNode)"
     }
 
-    try { $ExistingOU = Get-ADOrganizationalUnit -Filter "Name -eq '$name'" -SearchBase "$Path" -SearchScope OneLevel -ErrorAction SilentlyContinue  }
+    try { $ExistingOU = Get-ADOrganizationalUnit -Filter "Name -eq '$name'" -SearchBase "$Path" -SearchScope OneLevel -Server $DomainFQDN -ErrorAction SilentlyContinue  }
     catch { }
 
     if ($ExistingOU) {
-        Write-Output "OU already exists ""$Name"" -Path ""$Path"""
+        Write-Verbose "OU already exists ""$Name"" -Path ""$Path"""
     } else {
-        Write-Output "New-ADOrganizationalUnit -Name ""$Name"" -Path ""$Path"""
+        Write-Verbose "New-ADOrganizationalUnit -Name ""$Name"" -Path ""$Path"""
         New-ADOrganizationalUnit -Name $name -Description "$($Element.description)" -Path $Path -Server $DomainFQDN
     }
 
@@ -73,7 +73,7 @@ Function New-OUfromXML ($Element) {
 Creates CN structure according to input XML file
 #>
 Function New-CNfromXML ($Element) {
-    [string]$DC = ConvertFrom-ADXmlToDN $Element
+  # [string]$DC = ConvertFrom-ADXmlToDN $Element
     [string]$Name=$Element.Name
 
     # Special case for OU creation: we need the parent OU for the current OU in order to create the current OU as its child.
@@ -82,16 +82,26 @@ Function New-CNfromXML ($Element) {
     } else {
         $Path = "$(ConvertFrom-ADXmlToDN $Element.ParentNode)"
     }
-
-    try { $ExistingCN = Get-ADObject -Filter "Name -eq '$name'" -SearchBase "$Path" -SearchScope OneLevel -ErrorAction SilentlyContinue  }
+    try { $ExistingCN = Get-ADObject -Filter "Name -eq '$name'" -SearchBase "$Path" -Server $DomainFQDN -SearchScope OneLevel -ErrorAction SilentlyContinue  }
     catch { }
 
     if ($ExistingCN) {
-"Get-ADObject -Filter ""Name -eq '$name'"" -SearchBase ""$Path"" -SearchScope OneLevel -ErrorAction SilentlyContinue"
-        Write-Output "CN already exists: ""$Name"" -Path ""$Path"""
+        Write-Verbose "CN already exists: ""$Name"" -Path ""$Path"""
     } else {
-        Write-Output "New-ADObject -Name $Name -Type Container -Description ""$($Element.description)"" -Path $Path"
-        New-ADObject -Name $Name -Type Container -Description "$($Element.description)" -Path $Path -Server $DomainFQDN
+        Write-Verbose "New-ADObject -Name $Name -Type Container -Description ""$($Element.description)"" -Path $Path -Server $DomainFQDN"
+        Try {
+            # Description on Unix containers is quite long and seems to fail... create without description then try to add description later
+            New-ADObject -Name $Name -Type Container -Path $Path -Server $DomainFQDN
+            if (!([string]::IsNullOrWhiteSpace($Element.description))) {
+                Write-Verbose "Writing description to: CN=$Name,$Path   desc: $($Element.description)"
+                # if ($ConfirmPreference -eq 'Low') {$conf = @{Confirm = $true}} else { $conf=@{}}
+                if (!([bool]$WhatIfPreference.IsPresent)) {
+                    Set-ADObject -Identity "CN=$Name,$Path" -Description "$($Element.description)" -Server $DomainFQDN # -WhatIf:([bool]$WhatIfPreference.IsPresent) @conf
+                }
+            }
+        } catch { 
+            Write-Error ("Failed creating CN $Name in $Path !  Error: " + $_.Exception.Message )
+        }
 
     }
 
@@ -107,16 +117,18 @@ Function New-CNfromXML ($Element) {
 
 
 Import-Module .\DeployAdLib.psd1
-Import-Module ActiveDirectory
+Import-Module ActiveDirectory -Verbose:$False
 
+<#
 # Test for elevation :
 if (-not(Test-AdminStatus)) {
     Write-Error "Run this script elevated! This script requires administrative permissions."
     break
 }
+#>
 
 $domName = Get-DomainName -XmlFile $XmlFile -DomainName $DomainName
-Write-Output "OU structure for domain: $domName"
+Write-Verbose "OU structure for domain: $domName"
 [xml]$forXML = Get-Content $XmlFile
 $domXML = $forXML.forest.domains.domain | Where-Object { $_.name -eq $domName }
 
@@ -135,8 +147,8 @@ $domXML.OUs.OU |  ForEach-Object {
 #
 #  Protect all OU's from accidental deletion.
 #
-Get-ADOrganizationalUnit -Filter * -Properties ProtectedFromAccidentalDeletion | Where-Object {$_.ProtectedFromAccidentalDeletion -eq $false} | Select DistinguishedName,ProtectedFromAccidentalDeletion | Format-Table
 Get-ADOrganizationalUnit -Filter * -Properties ProtectedFromAccidentalDeletion | Where-Object {$_.ProtectedFromAccidentalDeletion -eq $false} | Set-ADOrganizationalUnit -ProtectedFromAccidentalDeletion $True
-Get-ADOrganizationalUnit -Filter * -Properties ProtectedFromAccidentalDeletion | Select-Object DistinguishedName,ProtectedFromAccidentalDeletion | Format-Table
+Get-ADOrganizationalUnit -Filter * -Properties ProtectedFromAccidentalDeletion | Select-Object DistinguishedName,ProtectedFromAccidentalDeletion
+
 
 
