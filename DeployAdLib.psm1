@@ -7,13 +7,21 @@
    Author : Ben van Zanten
    Company: Rabobank International
    Date   : Dec 2015
-   Version: 1.3
+   Version: 2.0
 
    History:  1.0  Initial version
              1.1  Added Convert-HtToString
              1.2  Added Get-FileEncoding
              1.3  Added ConvertTo-Hashtable
+             2.0  Added WMIFilter features, now requires ActiveDirectory PowerShell module
 #>
+[CmdletBinding(SupportsShouldProcess=$true)]
+PARAM()
+
+#Requires -Modules ActiveDirectory
+#Requires -Version 4
+
+Import-Module ActiveDirectory -Verbose:$False
 
 Function Test-AdminStatus {
     process {
@@ -282,8 +290,8 @@ Function Convert-HashTableToXml {
 #>
 Function Convert-HtToString {
     PARAM(
-        [Parameter(ValueFromPipeline=$true, Mandatory=$true)]
-        [System.Collections.Hashtable]$HTInput
+    [Parameter(ValueFromPipeline=$true, Mandatory=$true)]
+    [System.Collections.Hashtable]$HTInput
     )
 
 
@@ -763,3 +771,516 @@ Convert-IPv4MaskToNetwork -IPAddress 57.192.223.221 "255.255.192.0"
     # Return
     Convert-Int64toIpv4 ($subnetMaskInt64 -band $ipAddressInt64)
 }
+
+
+
+#  https://gallery.technet.microsoft.com/scriptcenter/f1491111-9f5d-4c83-b436-537eca9e8d94
+#  https://github.com/darkoperator/powershell_scripts/blob/master/install-wmifilters.ps1
+#  https://sdmsoftware.com/group-policy-blog/gpmc/digging-into-group-policy-wmi-filters-and-managing-them-through-powershell/
+
+
+<#
+.Synopsis
+   Script for creating WMI Filters for use with Group Policy Manager.
+.DESCRIPTION
+   The Script will create several WMI Filters for filtering based on:
+   - Processor Architecture.
+   - If the Hosts is a Virtual Machine
+   - Operating System Version.
+   - Type of Operating System.
+   - If Java is installed
+   - If Version 6 or 7 of Java JRE is installed.
+   - Version of IE
+.EXAMPLE
+   Running script if verbose output
+
+   .\install-wmifilters.ps1 -Verbose
+.NOTES
+   Author: Carlos Perez carlos_perez[at]darkoperator.com
+   Date: 1/13/13
+   Requirements: Execution policy should be RemoteSigned since script is not signed.
+#>
+
+class WMIFilter {
+
+    [string]$Name
+    [string]$Query
+    [string]$Description
+    [string]$NameSpace = 'Root\CIMV2'
+
+    # Constructors
+    WMIFilter (){
+    }
+    
+    # Constructor Name
+    WMIFilter ([string]$Name) {
+        $this.Name = $Name
+        $this.Description = $Name
+    }
+
+    # Constructor Name, Query
+    WMIFilter ([string]$Name, [string]$Query) {
+        $this.Name = $Name
+        $this.Query = $Query
+        $this.Description = $Name
+    }
+
+    # Constructor Name, Query, Description
+    WMIFilter ([string]$Name, [string]$Query, [string]$Description) {
+        $this.Name = $Name
+        $this.Query = $Query
+        $this.Description = $Description
+    }
+        
+}
+
+Function Set-DCAllowSystemOnlyChange {
+    param ([switch]$Set)
+    if ($Set) {
+        Write-Verbose "Checking if registry key is set to allow changes to AD System Only Attributes is set."
+        $ntds_vals = (Get-Item HKLM:\System\CurrentControlSet\Services\NTDS\Parameters).GetValueNames()
+        if ( $ntds_vals -eq "Allow System Only Change")  {
+            $kval = Get-ItemProperty HKLM:\System\CurrentControlSet\Services\NTDS\Parameters -name "Allow System Only Change"
+            if ($kval -eq "1") {
+                Write-Verbose "Allow System Only Change key is already set"    
+            } else {
+                Write-Verbose "Allow System Only Change key is not set"
+                Write-Verbose "Creating key and setting value to 1"
+                Set-ItemProperty HKLM:\System\CurrentControlSet\Services\NTDS\Parameters -name "Allow System Only Change" -Value 0 | Out-Null
+            }
+        } else {
+            New-ItemProperty HKLM:\System\CurrentControlSet\Services\NTDS\Parameters -name "Allow System Only Change" -Value 1 -PropertyType "DWord" | Out-Null
+        }
+    } else {
+        $ntds_vals = (Get-Item HKLM:\System\CurrentControlSet\Services\NTDS\Parameters).GetValueNames()
+        if ( $ntds_vals -eq "Allow System Only Change") {
+            Write-Verbose "Disabling Allow System Only Change Attributes on server"
+            Set-ItemProperty HKLM:\System\CurrentControlSet\Services\NTDS\Parameters -name "Allow System Only Change" -Value 0 | Out-Null
+        }
+    }
+}
+
+Function New-WMIFilter {
+    # Based on function from http://gallery.technet.microsoft.com/scriptcenter/f1491111-9f5d-4c83-b436-537eca9e8d94
+    # WMIFilter: custom object with: Name,Query,Description,NameSpace
+    PARAM (
+        [Parameter(Mandatory=$true, ValueFromPipeline=$True)]
+        [WMIFilter]$WMIFilter,
+
+        [Parameter(Mandatory=$true, ValueFromPipeline=$False)]
+        $Domain = (Get-ADDomain -Current LocalComputer)
+    )
+
+    $DomainADSI = Get-ADDomain -Identity $Domain
+    if ($DomainADSI) {
+
+        # $defaultNamingContext = (Get-ADRootDSE).defaultNamingContext
+        $NamingContext = $DomainADSI.DistinguishedName
+
+        $msWMIAuthor = "Administrator@" + $DomainADSI.DNSRoot
+        $Soms = Get-ADObject -SearchBase "CN=SOM,CN=WMIPolicy,CN=System,$($DomainADSI.DistinguishedName)" -SearchScope Subtree -Properties *  -Filter "ObjectClass -eq 'msWMI-Som' -and msWMI-Name -eq '$($WMIFilter.Name)'" -Server $DomainADSI.PDCEmulator
+        if ($Soms) {
+            Write-Error "WMI Filter $($WMIFilter.Name) in Domain $($DomainADSI.Name) already exists, use Set-WMIFilter to change"
+        } else {
+
+            Write-Verbose "Starting creation of WMI Filter"
+            $WMIGUID = [string]"{"+([System.Guid]::NewGuid())+"}"   
+            $WMIDN = "CN="+$WMIGUID+",CN=SOM,CN=WMIPolicy,CN=System,"+$NamingContext
+            $WMICN = $WMIGUID
+            $WMIdistinguishedname = $WMIDN
+            $WMIID = $WMIGUID
+
+            $now = (Get-Date).ToUniversalTime()
+            $msWMICreationDate = ($now.Year).ToString("0000") + ($now.Month).ToString("00") + ($now.Day).ToString("00") + ($now.Hour).ToString("00") + ($now.Minute).ToString("00") + ($now.Second).ToString("00") + "." + ($now.Millisecond * 1000).ToString("000000") + "-000"
+
+            $msWMIName = $WMIFilter.Name
+        
+            $Attr = @{
+                "msWMI-Name"             = $msWMIName;
+                "msWMI-Parm1"            = $msWMIParm1 = $WMIFilter.Description;
+                "msWMI-Parm2"            = "1;3;10;" + $WMIFilter.Query.Length.ToString() + ";WQL;$($WMIFilter.NameSpace);" + $WMIFilter.Query.ToString() + ";"  ;
+                "msWMI-Author"           = $msWMIAuthor;
+                "msWMI-ID"               = $WMIID;
+                "instanceType"           = 4;
+                "showInAdvancedViewOnly" = "TRUE";
+                "distinguishedname"      = $WMIdistinguishedname;
+                "msWMI-ChangeDate"       = $msWMICreationDate;
+                "msWMI-CreationDate"     = $msWMICreationDate
+            }
+            $WMIPath = ("CN=SOM,CN=WMIPolicy,CN=System,"+$NamingContext)
+
+            $ComputerInfo = Get-CimInstance -ClassName Win32_ComputerSystem -Namespace Root\CIMV2
+            if ($ComputerInfo.DomainRole -in (4,5)) {
+                Write-Verbose "Local machine is a DC, then we need to (Temp) enable local system change!"
+                Set-DCAllowSystemOnlyChange -Set
+
+                Write-Verbose "Adding WMI Filter for: $msWMIName"
+                New-ADObject -name $WMICN -type "msWMI-Som" -Path $WMIPath -OtherAttributes $Attr -Server $DomainADSI.PDCEmulator # | Out-Null
+
+                Set-DCAllowSystemOnlyChange
+            } else {
+                Write-Verbose "Adding WMI Filter for: $msWMIName"
+                New-ADObject -name $WMICN -type "msWMI-Som" -Path $WMIPath -OtherAttributes $Attr -Server $DomainADSI.PDCEmulator # | Out-Null
+            }
+        } # end if WMI filter already exists
+    }
+    Write-Verbose "Finished adding WMI Filter"
+}
+
+Function Remove-WMIFilter {
+    # Based on function from http://gallery.technet.microsoft.com/scriptcenter/f1491111-9f5d-4c83-b436-537eca9e8d94
+    # WMIFilter: custom object with: Name,Query,Description,NameSpace
+    PARAM (
+        [Parameter(Mandatory=$true, ValueFromPipeline=$True)]
+        [WMIFilter]$WMIFilter,
+
+        [Parameter(Mandatory=$true, ValueFromPipeline=$False)]
+        $Domain = (Get-ADDomain -Current LocalComputer)
+    )
+
+    $DomainADSI = Get-ADDomain -Identity $Domain
+    if ($DomainADSI) {
+
+        # $defaultNamingContext = (Get-ADRootDSE).defaultNamingContext
+        $NamingContext = $DomainADSI.DistinguishedName
+
+        $Soms = Get-ADObject -SearchBase "CN=SOM,CN=WMIPolicy,CN=System,$($DomainADSI.DistinguishedName)" -SearchScope Subtree -Properties *  -Filter "ObjectClass -eq 'msWMI-Som' -and msWMI-Name -eq '$($WMIFilter.Name)'" -Server $DomainADSI.PDCEmulator
+        if ( @($Soms).Count -eq 0) {
+            Write-Error "WMI Filter $($WMIFilter.Name) in Domain $($DomainADSI.Name) cannot be found, use New-WMIFilter to Create one"
+        }
+        elseif ( @($Soms).Count -gt 1) {
+            Write-Error "Multiple WMI Filters $($WMIFilter.Name) in Domain $($DomainADSI.Name) found, not continuing."
+        } else {
+
+            Write-Verbose "Removing WMI Filter $($Soms.ObjectGUID)"
+            $ComputerInfo = Get-CimInstance -ClassName Win32_ComputerSystem -Namespace Root\CIMV2
+            if ($ComputerInfo.DomainRole -in (4,5)) {
+                Write-Verbose "Local machine is a DC, then we need to (Temp) enable local system change!"
+                Set-DCAllowSystemOnlyChange -Set
+
+                Write-Verbose "Removing WMI Filter: $($WMIFilter.Name)"
+                Remove-ADObject -Identity $Soms -Server $DomainADSI.PDCEmulator
+
+                Set-DCAllowSystemOnlyChange
+            } else {
+                Write-Verbose "Removing WMI Filter: $($WMIFilter.Name)"
+                Remove-ADObject -Identity $Soms -Server $DomainADSI.PDCEmulator
+            }
+        } # end if WMI filter already exists
+    }
+    Write-Verbose "Finished removing WMI Filter"
+}
+
+Function Set-WMIFilter {
+    # Based on function from http://gallery.technet.microsoft.com/scriptcenter/f1491111-9f5d-4c83-b436-537eca9e8d94
+    # WMIFilter: custom object with: Name,Query,Description,NameSpace
+    PARAM (
+        [Parameter(Mandatory=$true, ValueFromPipeline=$True)]
+        [WMIFilter]$WMIFilter,
+
+        [Parameter(Mandatory=$true, ValueFromPipeline=$False)]
+        $Domain = (Get-ADDomain -Current LocalComputer)
+    )
+
+    $DomainADSI = Get-ADDomain -Identity $Domain
+    if ($DomainADSI) {
+
+        # $defaultNamingContext = (Get-ADRootDSE).defaultNamingContext
+        $NamingContext = $DomainADSI.DistinguishedName
+
+        $Soms = Get-ADObject -SearchBase "CN=SOM,CN=WMIPolicy,CN=System,$($DomainADSI.DistinguishedName)" -SearchScope Subtree -Properties *  -Filter "ObjectClass -eq 'msWMI-Som' -and msWMI-Name -eq '$($WMIFilter.Name)'" -Server $DomainADSI.PDCEmulator
+        if ( @($Soms).Count -eq 0) {
+            Write-Error "WMI Filter $($WMIFilter.Name) in Domain $($DomainADSI.Name) cannot be found, use New-WMIFilter to Create one"
+        }
+        elseif ( @($Soms).Count -gt 1) {
+            Write-Error "Multiple WMI Filters $($WMIFilter.Name) in Domain $($DomainADSI.Name) found, not continuing."
+        } else {
+
+            Write-Verbose "Changing WMI Filter $($Soms.ObjectGUID)"
+
+            $now = (Get-Date).ToUniversalTime()
+            $msWMICreationDate = ($now.Year).ToString("0000") + ($now.Month).ToString("00") + ($now.Day).ToString("00") + ($now.Hour).ToString("00") + ($now.Minute).ToString("00") + ($now.Second).ToString("00") + "." + ($now.Millisecond * 1000).ToString("000000") + "-000"
+
+            $Attr = @{
+                "msWMI-Parm1"            = $msWMIParm1 = $WMIFilter.Description;
+                "msWMI-Parm2"            = "1;3;10;" + $WMIFilter.Query.Length.ToString() + ";WQL;$($WMIFilter.NameSpace);" + $WMIFilter.Query.ToString() + ";"  ;
+                "msWMI-ChangeDate"       = $msWMICreationDate;
+            }
+
+            $ComputerInfo = Get-CimInstance -ClassName Win32_ComputerSystem -Namespace Root\CIMV2
+            if ($ComputerInfo.DomainRole -in (4,5)) {
+                Write-Verbose "Local machine is a DC, then we need to (Temp) enable local system change!"
+                Set-DCAllowSystemOnlyChange -Set
+
+                Write-Verbose "modifying WMI Filter for: $($WMIFilter.Name)"
+                Set-ADObject -Identity $Soms -Replace $Attr -Server $DomainADSI.PDCEmulator
+
+                Set-DCAllowSystemOnlyChange
+            } else {
+                Write-Verbose "modifying WMI Filter for: $($WMIFilter.Name)"
+                Set-ADObject -Identity $Soms -Replace $Attr -Server $DomainADSI.PDCEmulator
+            }
+        } # end if WMI filter already exists
+    }
+    Write-Verbose "Finished modifying WMI Filter"
+}
+
+Function Get-WMIFilter {
+    PARAM (
+        [Parameter(Mandatory=$false, ValueFromPipeline=$False)]
+        $Domain = (Get-ADDomain -Current LocalComputer),
+
+        [Parameter(Mandatory=$false, ValueFromPipeline=$True, ValueFromPipelineByPropertyName=$true, ParameterSetName='WMIFilter')]
+        [WMIFilter]$WMIFilter,
+
+        [Parameter(Mandatory=$false, ValueFromPipeline=$True, ValueFromPipelineByPropertyName=$true, ParameterSetName='Name')]
+        [string]$Name,
+
+        [Parameter(Mandatory=$false, ValueFromPipeline=$True, ValueFromPipelineByPropertyName=$true, ParameterSetName='All')]
+        [switch]$All
+    )
+
+    $DomainADSI = Get-ADDomain -Identity $Domain
+    if ($DomainADSI) {
+    if ($WMIFIlter) { 
+        $SearchFilter = "ObjectClass -eq 'msWMI-Som' -and msWMI-Name -eq '$($WMIFilter.Name)'"
+    } elseif ($Name) {
+        $SearchFilter = "ObjectClass -eq 'msWMI-Som' -and msWMI-Name -eq '$Name'"
+    } else {
+        $SearchFilter = "ObjectClass -eq 'msWMI-Som'"
+    }
+    $Soms = Get-ADObject -SearchBase "CN=SOM,CN=WMIPolicy,CN=System,$($DomainADSI.DistinguishedName)" -SearchScope Subtree -Properties *  -Filter $SearchFilter -Server $DomainADSI.PDCEmulator
+
+    ForEach ($Som in $Soms) {
+        [pscustomobject]@{
+        Name         = $Som.'msWMI-Name'
+        Query        = (($Som.'msWMI-Parm2') -Split ';')[6]
+        NameSpace    = (($Som.'msWMI-Parm2') -Split ';')[5]
+        Author       = $Som.'msWMI-Author'
+        ChangeDate   = $Som.'msWMI-ChangeDate'
+        CreationDate = $Som.'msWMI-CreationDate'
+        Description  = $Som.'msWMI-Parm1'
+        ID           = $Som.'msWMI-ID'
+        }
+    }
+    } else {
+        Write-Error "Cannot find domain $Domain"
+    }
+}
+
+
+<#
+.Example
+$WMIFilters = @(
+  [pscustomobject]@{
+    Name         = 'Check for Operating System Windows 2016'
+    Query        = 'Select * from Win32_OperatingSystem where (Version = "10.0.14393" and (ProductType="2" or ProductType = "3" ) )'
+    NameSpace    = 'root\CIMv2'
+    Description  = 'Check for Operating System Windows 2016'
+  },
+  [pscustomobject]@{
+    Name         = 'Check for Operating System Windows 2019'
+    Query        = 'Select * from Win32_OperatingSystem where (Version = "10.0.17763" and (ProductType="2" or ProductType = "3" ) )'
+    NameSpace    = 'root\CIMv2'
+    Description  = 'Check for Operating System Windows 2019'
+  }
+)
+
+forEach ($WmiFilter in $WMIFilters) {  New-WMIFilter -Domain 'rabotest.com'    -WMIFilter $WmiFilter -Verbose }
+forEach ($WmiFilter in $WMIFilters) {  New-WMIFilter -Domain 'am.rabotest.com' -WMIFilter $WmiFilter -Verbose }
+forEach ($WmiFilter in $WMIFilters) {  New-WMIFilter -Domain 'ap.rabotest.com' -WMIFilter $WmiFilter -Verbose }
+forEach ($WmiFilter in $WMIFilters) {  New-WMIFilter -Domain 'eu.rabotest.com' -WMIFilter $WmiFilter -Verbose }
+forEach ($WmiFilter in $WMIFilters) {  New-WMIFilter -Domain 'oc.rabotest.com' -WMIFilter $WmiFilter -Verbose }
+
+get-adcomputer -filter * -properties operatingsystem,operatingsystemversion | sort OperatingSystem,Name | ft DNSHostName,OperatingSystemVersion,OperatingSystem
+get-adcomputer -filter * -properties operatingsystem,operatingsystemversion | Select-Object -Property OperatingSystemVersion,OperatingSystem -Unique | Sort-Object -Property OperatingSystemVersion | ft OperatingSystemVersion,OperatingSystem
+
+   $WMIFilter2019 =  [pscustomobject]@{
+    Name         = 'Check for Operating System Windows 2019'
+    Query        = 'Select * from Win32_OperatingSystem where (Version = "10.0.17763" and (ProductType="2" or ProductType = "3" ) )'
+    NameSpace    = 'root\CIMv2'
+    Description  = 'Check for Operating System Windows 2019'
+  }
+
+$WMIFilter2016 = New-Object -TypeName wmifilter -ArgumentList 'Check for Operating System Windows 2016','Select * from Win32_OperatingSystem where (Version = "10.0.14393" and (ProductType="2" or ProductType = "3" ) )'
+$WMIFilter2019 = New-Object -TypeName wmifilter -ArgumentList 'Check for Operating System Windows 2019','Select * from Win32_OperatingSystem where (Version = "10.0.17763" and (ProductType="2" or ProductType = "3" ) )'
+
+
+
+  New-WMIFilter -Domain 'rabotest.com'    -WMIFilter $WmiFilter2019 -Verbose
+  New-WMIFilter -Domain 'am.rabotest.com' -WMIFilter $WmiFilter2019 -Verbose
+  New-WMIFilter -Domain 'ap.rabotest.com' -WMIFilter $WmiFilter2019 -Verbose
+  New-WMIFilter -Domain 'eu.rabotest.com' -WMIFilter $WmiFilter2019 -Verbose
+  New-WMIFilter -Domain 'oc.rabotest.com' -WMIFilter $WmiFilter2019 -Verbose
+
+  Set-WMIFilter -Domain 'rabotest.com'    -WMIFilter $WmiFilter2016 -Verbose
+  Set-WMIFilter -Domain 'am.rabotest.com' -WMIFilter $WmiFilter2016 -Verbose
+  Set-WMIFilter -Domain 'ap.rabotest.com' -WMIFilter $WmiFilter2016 -Verbose
+  Set-WMIFilter -Domain 'eu.rabotest.com' -WMIFilter $WmiFilter2016 -Verbose
+  Set-WMIFilter -Domain 'oc.rabotest.com' -WMIFilter $WmiFilter2016 -Verbose
+
+.Example
+    $WMIFilters = @(
+     $WMIFilter2016 = New-Object -TypeName wmifilter -ArgumentList  ('Hyper-V Virtual Machines', 
+                        'SELECT * FROM Win32_ComputerSystem WHERE Model = "Virtual Machine"', 
+                        'Microsoft Hyper-V 2.0 AND 3.0'),
+                    ('VMware Virtual Machines', 
+                        'SELECT * FROM Win32_ComputerSystem WHERE Model LIKE "VMware%"', 
+                        'VMware Fusion, WORkstation AND ESXi'),
+                    ('Parallels Virtual Machines', 
+                        'SELECT * FROM Win32_ComputerSystem WHERE Model LIKE "Parallels%"', 
+                        'OSX Parallels Virtual Machine'),
+                    ('VirtualBox Virtual Machines', 
+                        'SELECT * FROM Win32_ComputerSystem WHERE Model LIKE "VirtualBox%"', 
+                        'Oracle VirtualBox Virtual Machine'),
+                    ('Xen Virtual Machines', 
+                        'SELECT * FROM Win32_ComputerSystem WHERE Model LIKE "HVM dom%"', 
+                        'Citrix Xen Server Virtual Machine'),
+                    ('Virtual Machines',
+                        'SELECT * FROM Win32_ComputerSystem WHERE (Model LIKE "Parallels%" OR Model LIKE "HVM dom% OR Model LIKE "VirtualBox%" OR Model LIKE "Parallels%" OR Model LIKE "VMware%" OR Model = "Virtual Machine")',
+                        'Virtual Machine from Hyper-V, VMware, Xen, Parallels OR VirtualBox'),
+                    ('Java is Installed', 
+                        'SELECT * FROM win32_DirectORy WHERE (name="c:\\Program Files\\Java" OR name="c:\\Program Files (x86)\\Java")', 
+                        'Oracle Java'),
+                    ('Java JRE 7 is Installed', 
+                        'SELECT * FROM win32_DirectORy WHERE (name="c:\\Program Files\\Java\\jre7" OR name="c:\\Program Files (x86)\\Java\\jre7")', 
+                        'Oracle Java JRE 7'),
+                    ('Java JRE 6 is Installed', 
+                        'SELECT * FROM win32_DirectORy WHERE (name="c:\\Program Files\\Java\\jre6" OR name="c:\\Program Files (x86)\\Java\\jre6")', 
+                        'Oracle Java JRE 6'),
+                    ('Workstation 32-bit', 
+                        'Select * from WIN32_OperatingSystem WHERE ProductType=1 Select * from Win32_Processor WHERE AddressWidth = "32"', 
+                        ''),
+                    ('Workstation 64-bit', 
+                        'Select * from WIN32_OperatingSystem WHERE ProductType=1 Select * from Win32_Processor WHERE AddressWidth = "64"', 
+                        ''),
+                    ('Workstations', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE ProductType = "1"', 
+                        ''),
+                    ('Domain Controllers', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE ProductType = "2"', 
+                        ''),
+                    ('Servers', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE ProductType = "3"', 
+                        ''),
+                    ('Windows XP', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE (Version LIKE "5.1%" OR Version LIKE "5.2%") AND ProductType = "1"', 
+                        ''),
+                    ('Windows Vista', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "6.0%" AND ProductType = "1"', 
+                        ''),
+                    ('Windows 7', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "6.1%" AND ProductType = "1"', 
+                        ''),
+                    ('Windows 8', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "6.2%" AND ProductType = "1"', 
+                        ''),
+                    ('Windows Server 2003', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "5.2%" AND ProductType = "3"', 
+                        ''),
+                    ('Windows Server 2008', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "6.0%" AND ProductType = "3"', 
+                        ''),
+                    ('Windows Server 2008 R2', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "6.1%" AND ProductType = "3"', 
+                        ''),
+                    ('Windows Server 2012', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "6.2%" AND ProductType = "3"', 
+                        ''),
+                    ('Windows Vista AND Windows Server 2008', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "6.0%" AND ProductType<>"2"', 
+                        ''),
+                    ('Windows Server 2003 AND Windows Server 2008', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE (Version LIKE "5.2%" OR Version LIKE "6.0%") AND ProductType="3"', 
+                        ''),
+                    ('Windows XP AND 2003', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "5.%" AND ProductType<>"2"', 
+                        ''),
+                    ('Windows 8 AND 2012', 
+                        'SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "6.2%" AND ProductType<>"2"', 
+                        ''),
+                    ('Internet Explorer 10', 
+                        'SELECT * FROM CIM_Datafile WHERE (Name="c:\\Program Files (x86)\\Internet Explorer\\iExplore.exe" OR Name="c:\\Program Files\\Internet Explorer\\iExplore.exe") AND version LIKE "10.%"'),
+                    ('Internet Explorer 9', 
+                        'SELECT * FROM CIM_Datafile WHERE (Name="c:\\Program Files (x86)\\Internet Explorer\\iExplore.exe" OR Name="c:\\Program Files\\Internet Explorer\\iExplore.exe") AND version LIKE "9.%"'),
+                    ('Internet Explorer 8', 
+                        'SELECT * FROM CIM_Datafile WHERE (Name="c:\\Program Files (x86)\\Internet Explorer\\iExplore.exe" OR Name="c:\\Program Files\\Internet Explorer\\iExplore.exe") AND version LIKE "8.%"'),
+                    ('Internet Explorer 7', 
+                        'SELECT * FROM CIM_Datafile WHERE (Name="c:\\Program Files (x86)\\Internet Explorer\\iExplore.exe" OR Name="c:\\Program Files\\Internet Explorer\\iExplore.exe") AND version LIKE "7.%"')
+                )
+
+
+#>
+
+# SIG # Begin signature block
+# MIINCgYJKoZIhvcNAQcCoIIM+zCCDPcCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUsQat7tEbWVZiNq6q8ZCJ2+jm
+# ojWgggp2MIIFEjCCA/qgAwIBAgITVwAD8K8q0U/LIB3mcAABAAPwrzANBgkqhkiG
+# 9w0BAQsFADBGMR8wHQYDVQQKExZSYWJvYmFuayBJbnRlcm5hdGlvbmFsMSMwIQYD
+# VQQDExpSSSBJbnRyYW5ldCBJc3N1aW5nIENBMiAwMTAeFw0xOTA2MjAwOTQ4MzFa
+# Fw0yMTA2MTkwOTQ4MzFaMIGTMQswCQYDVQQGEwJOTDEQMA4GA1UECBMHVXRyZWNo
+# dDEQMA4GA1UEBxMHVXRyZWNodDERMA8GA1UEChMIUmFib2JhbmsxLTArBgNVBAsT
+# JENPTyBJbmZyYXN0cnVjdHVyZSBCV0EgQ29yZSBJZGVudGl0eTEeMBwGA1UEAxMV
+# WmFudGVuIHZhbiwgQkFNIChCZW4pMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIB
+# CgKCAQEA2nJ8XYcvaO9jrJcuLx4vVSS+X79F0ay3YUHGuZf7OhbEotLbyc6d/xfL
+# bch0qLAwojGwNwMp0eb4hxLFtB2oaVg+GdE3rE+4zy8IDeGIHajOn3GNkyEj2obg
+# VSBJv8aU55Xjizj+ww2NfWN8Hclp9eouzJSsYufdK6+k7vo/OCLveYSLMN6aSsO7
+# ThEhaUNmM5GpRRAqtPLYP63OXkGUgRBcoUemnlM2H5qyZyJsyFakTRUTBzXNjWhh
+# YckivsU9DT0kmr/JTvM94s8zsXJPLnfy52L+v5f2p5vBII6xDvT73cR/N1hO3L0F
+# l5+rWgfF1wmoITfMD3a23YL//6HclQIDAQABo4IBqTCCAaUwHQYDVR0OBBYEFAPG
+# 2skcWj0ilaYlGoyLM4kbeGhkMB8GA1UdIwQYMBaAFOdamPMB8kMaIylmJwHFujf/
+# 2UX/MFMGA1UdHwRMMEowSKBGoESGQmh0dHA6Ly9wa2kyLnJhYm9uZXQuY29tL0NS
+# TC9SSSUyMEludHJhbmV0JTIwSXNzdWluZyUyMENBMiUyMDAxLmNybDCBjQYIKwYB
+# BQUHAQEEgYAwfjBRBggrBgEFBQcwAoZFaHR0cDovL3BraTIucmFib25ldC5jb20v
+# QUlBL1JJJTIwSW50cmFuZXQlMjBJc3N1aW5nJTIwQ0EyJTIwMDEoMSkuY3J0MCkG
+# CCsGAQUFBzABhh1odHRwOi8vb2NzcDIucmFib25ldC5jb20vb2NzcDAOBgNVHQ8B
+# Af8EBAMCB4AwPAYJKwYBBAGCNxUHBC8wLQYlKwYBBAGCNxUIhqmZGIT16xqG+ZUj
+# sctWhMXNCn+Ep9wGhrPsaAIBZAIBAzATBgNVHSUEDDAKBggrBgEFBQcDAzAbBgkr
+# BgEEAYI3FQoEDjAMMAoGCCsGAQUFBwMDMA0GCSqGSIb3DQEBCwUAA4IBAQCugm6X
+# 6mggbO+dBEsnZiWmzHe+3O6xD6kvsxeCxY8OJRIzcrcQHpCTTZtAE/lQ5Ba0o+tt
+# 9tvAMiSaPNpFq+4L72b3ZcP+yxaQbcRwdNqxdGEYmwy4yzprUVjx4oVD+YXDB7Dx
+# kE2MnxmNCe7ojrZoD4zCby0MnwtRXbtEzv6iG7ZB1DSdsc9OkJbZh5cniBJ7PLSN
+# G6BrelRZv0OeUgvehmW/hpMVha84OBhR/crN51Bg9cXF6rQEFn/rDzR398H45Fp3
+# vdaw7l6DrcCJWssZ6FMT9b6vVb/Wt3Hm0bKB4IKc08/I5AfddCm5WKbmSJOOJnUo
+# RqCNJtlLyskvshsOMIIFXDCCA0SgAwIBAgITGgAAAAUjgNUwgCMNxgAAAAAABTAN
+# BgkqhkiG9w0BAQsFADBBMR8wHQYDVQQKExZSYWJvYmFuayBJbnRlcm5hdGlvbmFs
+# MR4wHAYDVQQDExVSSSBDb3Jwb3JhdGUgUm9vdCBDQTIwHhcNMTcwMzAyMDg1NDM0
+# WhcNMjIwMzAyMDkwNDM0WjBGMR8wHQYDVQQKExZSYWJvYmFuayBJbnRlcm5hdGlv
+# bmFsMSMwIQYDVQQDExpSSSBJbnRyYW5ldCBJc3N1aW5nIENBMiAwMTCCASIwDQYJ
+# KoZIhvcNAQEBBQADggEPADCCAQoCggEBALT5b5/XXyXFSFM1JXxzMaBW4gGFkLyx
+# y55RCXVUu00LrhfUcxk3p4fNYsNlYzm9swkbp2HThgFFp5RaB2UsI2VyeqQDlXpf
+# w3Sqco1191ijnk7+J1UqWCoKdVzOymaaUIPLCWLdXzymqsubPB0HdyI1Zjsn9Tjl
+# YV4wEX160fHZK8BCkTLXAG9ugDtc8ol01mPsQzxE0p+p90EsT6bFIKBOKgHgEzua
+# AQU8X1kVzfRg1Lr3Gb79mnX+yltgz5Yh9bAfJEMWnP0kdJcx4IBPYdnNmvkP1pan
+# 42dzsO+R6C0kIbh9moZ7Ae4MvLpEBuMwDiHHANjQBH32LdXm5XqK0n0CAwEAAaOC
+# AUYwggFCMBAGCSsGAQQBgjcVAQQDAgEBMCMGCSsGAQQBgjcVAgQWBBQiNPkmKQcc
+# Hr3YQYj7NP2IwJDzxDAdBgNVHQ4EFgQU51qY8wHyQxojKWYnAcW6N//ZRf8wGQYJ
+# KwYBBAGCNxQCBAweCgBTAHUAYgBDAEEwCwYDVR0PBAQDAgGGMBIGA1UdEwEB/wQI
+# MAYBAf8CAQAwHwYDVR0jBBgwFoAUmP9e7gl3oEI+6PNNJ/7f7UdGTvIwPgYDVR0f
+# BDcwNTAzoDGgL4YtaHR0cDovL3BraTIucmFib25ldC5jb20vY3JsL1JJQ29ycFJv
+# b3RDQTIuY3JsME0GCCsGAQUFBwEBBEEwPzA9BggrBgEFBQcwAoYxaHR0cDovL3Br
+# aTIucmFib25ldC5jb20vQUlBL1JJQ29ycFJvb3RDQTJDZXJ0LmNydDANBgkqhkiG
+# 9w0BAQsFAAOCAgEAhUymSSqxDQknB3A0uutzonpL0GYzz6/ncIdZboFfZ0lk73bj
+# yMdPeKOHUevjhkMVMnWkUHGREcNJGPRrop9LTijl4kExNHdPl2iaBx0ELIzfYCHd
+# SuHXv4GiaCBrvAoefzYNfdsbK8bVkak/BtVorFyqYg4zhRf5e1D07bxsbpwF9/kD
+# ZnPuqKxxgsEteLAyCYKd5kK4zU1sldJ/ff37uVyUlF6RzHGeS9tpDDp/oS/wYxvD
+# 3uI8t0/FgaldgTNqLBYtrPVG/ZxbCn7GzcTCBxc4pedqwklwulStBc8QcA47qe8S
+# uR8s+z0jS0whVo8AUB203jqhdDdACZWzh6oYF6pJAnSXv7A5S9CzycbOsC5Qoglh
+# X/0G58igT4axQNder4Qb6u1zDlfz7QqwgYpkiMiQ4gzWIqntLtRkFIJJlfxmPT6B
+# cncLVWUfL4SCR9abR2aSgDAKEIpChkxFvJ6su6WhodTXEo+3utcn38zb2JOXUYaA
+# nGkDKWOSPO38f3tlY95fI//zhF5sWTvFSJv+EWM8AtAbRAGn1tM+3rMlcXWBUS2l
+# djD7+L8oyQGeImIdMbYrpAvF713rzYa9lKGx+9ElzK6VhRIZ+78iL+E9Ef/+RU5q
+# 5dUhx6v6+/FvGG7dXcTcl+4s8u4Tqffc0QlJ0PwzDTHt1YTMk8rLZvPnwdsxggH+
+# MIIB+gIBATBdMEYxHzAdBgNVBAoTFlJhYm9iYW5rIEludGVybmF0aW9uYWwxIzAh
+# BgNVBAMTGlJJIEludHJhbmV0IElzc3VpbmcgQ0EyIDAxAhNXAAPwryrRT8sgHeZw
+# AAEAA/CvMAkGBSsOAwIaBQCgeDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkG
+# CSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEE
+# AYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTjgYMAK3/coKbKBSM2U8nRT2J8BTANBgkq
+# hkiG9w0BAQEFAASCAQDXa3Iywd+mEpxlILpR1KFcFfcDzkrzAZVrjmmVSmBIuk3f
+# 6dgOsTUEMLKlEjLO3KRUp7VuX7GK/KcgbTu0V2cl9WRHFVVZuNf7MzsBSIkAZ8BY
+# c5tP/lEBqENwjmhj6AgxL43KKLFpY0yJEOnGmRNHYbIfwPkccOWyqio6OL2NnWYw
+# CX+5Pu8sYfQij8m+MFAx09nqkSXgjiVhjgbn2acI25yvsLlZ5E1bbFt37JWnkQLv
+# qMXwwvkZcT2+XZq5TivHATr9So+jdTJhPlbirN4Ff0rbzVx+7jKV1p8hg96+/c+t
+# GwPiRt/x9ndS7QiH5EQtwKneleTBHczbPMQojR38
+# SIG # End signature block
